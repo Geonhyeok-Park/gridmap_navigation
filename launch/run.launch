@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="gridmap-navigation" type="gridmap_nav_planner" name="planner" respawn="false"/>
+</launch>

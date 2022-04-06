@@ -59,8 +59,6 @@ public:
     void waitOccupancyMap();
 
     void allocateMapMemory();
-    void allocateGlobalMap();
-    void allocateLocalMap();
 
     void resetGridMapMemory();
     void resetLocalMapMemory();
@@ -104,7 +102,6 @@ private:
 
 private:
     GridMap gridMap_;
-    GridMap localMap_;
 
 private:
     RosTFManager tf_;
@@ -146,12 +143,15 @@ globalNavPlannerRos::globalNavPlannerRos()
     pubLocalmap = nh.advertise<grid_map_msgs::GridMap>(topicLocalMapPub, 1);
 
     // 5. initialize map values
-    initialize();
+    if (!initialize())
+    {
+        ROS_ERROR("globalNavPlannerRos initialization failed. Shut down process");
+        nh.shutdown();
+    }
 }
 
 void globalNavPlannerRos::waitOccupancyMap()
 {
-
     mapClient = nh.serviceClient<nav_msgs::GetMap>("/static_map");
     while (!mapClient.call(getMap))
     {
@@ -163,12 +163,6 @@ void globalNavPlannerRos::waitOccupancyMap()
 }
 
 void globalNavPlannerRos::allocateMapMemory()
-{
-    allocateGlobalMap();
-    allocateLocalMap();
-}
-
-void globalNavPlannerRos::allocateGlobalMap()
 {
     // static map
     gridMap_.add("raw");
@@ -182,12 +176,10 @@ void globalNavPlannerRos::allocateGlobalMap()
     // path info
     gridMap_.add("previousGridPosition0");
     gridMap_.add("previousGridPosition1");
-}
 
-void globalNavPlannerRos::allocateLocalMap()
-{
-    localMap_.add("laser_raw");
-    localMap_.add("laser_inflated");
+    // local map
+    gridMap_.add("laser_raw");
+    gridMap_.add("laser_inflated");
 }
 
 void globalNavPlannerRos::resetGridMapMemory()
@@ -197,8 +189,8 @@ void globalNavPlannerRos::resetGridMapMemory()
 
 void globalNavPlannerRos::resetLocalMapMemory()
 {
-    localMap_["laser_raw"].setZero();
-    localMap_["laser_inflated"].setZero();
+    gridMap_["laser_raw"].setZero();
+    gridMap_["laser_inflated"].setZero();
 }
 
 bool globalNavPlannerRos::initialize()
@@ -215,13 +207,12 @@ bool globalNavPlannerRos::initialize()
     // scaleLayerValue("obstacleCost");
     getTraversableSearchspace();
 
-    // local map
-    localMap_.setFrameId("map");
-    localMap_.setGeometry(gridMap_.getLength(), gridMap_.getResolution());
-    localMap_["laser_raw"].setConstant(FREE);
-    localMap_["laser_inflated"].setConstant(FREE);
-
     ROS_INFO("Conversion done. Global map initialized.");
+
+    // local map
+    gridMap_["laser_raw"].setConstant(FREE);
+    gridMap_["laser_inflated"].setConstant(FREE);
+
     ROS_INFO("Local map initialized to zero.");
 
     return true;
@@ -511,8 +502,9 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
 
     // current robot position
     tf_.getTF(msg->header.stamp);
-    // robotPosition_(0) = tf_.BaseToMap.translation.x;
-    // robotPosition_(1) = tf_.BaseToMap.translation.y;
+    robotPosition_(0) = tf_.BaseToMap.translation.x;
+    robotPosition_(1) = tf_.BaseToMap.translation.y;
+    const Position &robotPosition = robotPosition_;
 
     // move point cloud
     const auto sensorToMap = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);
@@ -526,27 +518,23 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     if (!goalReceived_)
         return;
 
-    // move map
-    Position robotPosition(tf_.BaseToMap.translation.x, tf_.BaseToMap.translation.y);
-    localMap_.move(robotPosition);
-
     clk::time_point t1 = clk::now();
     // laser cost
     for (const auto &p : cloudM->points)
     {
         Position point(p.x, p.y);
         Index pointIndex;
-        if (!localMap_.getIndex(point, pointIndex))
+        if (!gridMap_.getIndex(point, pointIndex))
             continue;
 
-        localMap_.at("laser_raw", pointIndex) = maxIntrinsicCost_;
+        gridMap_.at("laser_raw", pointIndex) = maxIntrinsicCost_;
 
         Index startIndex(inflationSize_, inflationSize_);
         Index subMapSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
-        SubmapIterator inflationIter(localMap_, pointIndex - startIndex, subMapSize);
+        SubmapIterator inflationIter(gridMap_, pointIndex - startIndex, subMapSize);
         for (inflationIter; !inflationIter.isPastEnd(); ++inflationIter)
         {
-            localMap_.at("laser_inflated", *inflationIter) = localMap_.at("laser_raw", pointIndex);
+            gridMap_.at("laser_inflated", *inflationIter) = gridMap_.at("laser_raw", pointIndex);
         }
     }
     clk::time_point t2 = clk::now();
@@ -554,37 +542,37 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
 
     // visualize local map
     bool getSubmap;
-    publishMap(localMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
+    publishMap(gridMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
     std::cout << "Submap published " << std::endl;
 
-    // gridMap_["totalCost"] = gridMap_["intrinsicCost"] + localMap_["laser_inflated"];
-    const auto &intrinsicCostmap = gridMap_["intrinsicCost"];
-    const auto &laserCostmap = localMap_["laser_inflated"];
-    auto &totalCostmap = gridMap_["totalCost"];
-    for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
-    {
-        size_t i = iter.getLinearIndex();
-        const float intrinsicCost = intrinsicCostmap(i);
-        const float laserCost = laserCostmap(i);
-        float &totalCost = totalCostmap(i);
+    gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_inflated"];
+    // const auto &intrinsicCostmap = gridMap_["intrinsicCost"];
+    // const auto &laserCostmap = gridMap_["laser_inflated"];
+    // auto &totalCostmap = gridMap_["totalCost"];
+    // for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
+    // {
+    //     size_t i = iter.getLinearIndex();
+    //     const float intrinsicCost = intrinsicCostmap(i);
+    //     const float laserCost = laserCostmap(i);
+    //     float &totalCost = totalCostmap(i);
 
-        if (!(std::isfinite(intrinsicCost) || std::isfinite(laserCost)))
-            continue;
+    //     if (!(std::isfinite(intrinsicCost) || std::isfinite(laserCost)))
+    //         continue;
 
-        totalCost = intrinsicCost + laserCost;
-    }
+    //     totalCost = intrinsicCost + laserCost;
+    // }
 
     // find path and publish
-    // std::vector<Position> poseList;
-    // findGradientPath("totalCost", poseList);
-    // std::cout << "find path" << std::endl;
-    // nav_msgs::Path pathMsg;
-    // toRosMsg(poseList, pathMsg);
-    // pubPath.publish(pathMsg);
+    std::vector<Position> poseList;
+    findGradientPath("totalCost", poseList);
+    std::cout << "find path" << std::endl;
+    nav_msgs::Path pathMsg;
+    toRosMsg(poseList, pathMsg);
+    pubPath.publish(pathMsg);
 
     publishMap(gridMap_.getSubmap(robotPosition_, Length(100, 100), getSubmap), pubGridmap);
 
-    gridMap_["totalCost"] -= localMap_["laser_inflated"];
+    gridMap_["totalCost"] -= gridMap_["laser_inflated"];
     resetLocalMapMemory();
 }
 
@@ -611,7 +599,6 @@ void globalNavPlannerRos::loadParamServer()
 
 void globalNavPlannerRos::toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const
 {
-
     msg.header.frame_id = occupancyMap_.header.frame_id;
     msg.header.stamp = ros::Time::now();
 

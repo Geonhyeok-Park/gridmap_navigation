@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(gridmap-naviation)
+project(gridmap-navigation)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -116,7 +116,7 @@ find_package(PCL REQUIRED COMPONENTS common)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES gridmap-naviation
+  LIBRARIES gridmap-navigation
   CATKIN_DEPENDS dynamic_reconfigure grid_map_core grid_map_ros grid_map_msgs message_generation nav_msgs roscpp sensor_msgs std_msgs tf tf2_ros
 #  DEPENDS system_lib
 )
@@ -134,7 +134,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/gridmap-naviation.cpp
+#   src/${PROJECT_NAME}/gridmap-navigation.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -209,7 +209,7 @@ include_directories(
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_gridmap-naviation.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_gridmap-navigation.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

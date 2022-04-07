@@ -1,123 +1,4 @@
-#include "globalNavPlannerRos.hpp"
-
-#ifndef GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
-#define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
-
-// grid map ROS
-#include <grid_map_msgs/GridMap.h>
-#include <grid_map_ros/GridMapRosConverter.hpp>
-
-// TF manager
-#include "gridmap-navigation/TFManager.hpp"
-
-// ROS msgs
-#include <nav_msgs/GetMap.h>
-#include <nav_msgs/OccupancyGrid.h>
-#include <nav_msgs/Path.h>
-#include <sensor_msgs/LaserScan.h>
-#include <laser_geometry/laser_geometry.h>
-
-// pcl
-#include <pcl/point_cloud.h>
-#include <pcl_ros/transforms.h>
-#include <pcl_conversions/pcl_conversions.h>
-
-#include <queue>
-
-#include <chrono>
-
-#define duration(a) std::chrono::duration_cast<std::chrono::microseconds>(a).count()
-typedef std::chrono::high_resolution_clock clk;
-
-using namespace grid_map;
-
-float getDist(const Position &pos1, const Position &pos2)
-{
-    return (float)sqrt(pow(pos1.x() - pos2.x(), 2) + pow(pos1.y() - pos2.y(), 2));
-}
-
-class globalNavPlannerRos
-{
-    const int OCCUPIED = 100;
-    const int FREE = 0;
-    const int UNKNWON = -10;
-
-    // value in occupancy grid map
-    const int OCC_MAP = 100;
-    const int FREE_MAP = 0;
-
-private:
-    bool initialize();
-
-public:
-    globalNavPlannerRos();
-
-    virtual ~globalNavPlannerRos() { nh.shutdown(); }
-
-    void loadParamServer();
-
-    void waitOccupancyMap();
-
-    void allocateMapMemory();
-
-    void resetGridMapMemory();
-    void resetLocalMapMemory();
-
-    void scaleLayerValue(const std::string &layer);
-    void gridInflation(GridMap &gridMap, const std::string &layerIn, int inflateState, const std::string &layerOut) const;
-
-    void getTraversableSearchspace();
-
-    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
-
-    bool updateIntrinsicCost(double &maxCost);
-
-    bool findGradientPath(const std::string &layer, std::vector<Position> &poseList);
-
-    void laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
-
-private:
-    ros::NodeHandle nh;
-
-    ros::Publisher pubPath;
-    ros::Publisher pubGridmap;
-    ros::Publisher pubLaser;
-    ros::Publisher pubLocalmap;
-    ros::Subscriber subLaser;
-    ros::Subscriber subGoal;
-
-    std::string topicPathPub;
-    std::string topicGridMapPub;
-    std::string topicLaserPub;
-    std::string topicLocalMapPub;
-    std::string topicLaserSub;
-    std::string topicGoalSub;
-
-    ros::ServiceClient mapClient;
-    nav_msgs::GetMap getMap;
-
-    void publishMap(const GridMap &gridmap, ros::Publisher publisher);
-
-    void toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const;
-
-private:
-    GridMap gridMap_;
-
-private:
-    RosTFManager tf_;
-    laser_geometry::LaserProjection laser2pc_;
-
-    nav_msgs::OccupancyGrid occupancyMap_;
-    int inflationSize_;
-    Position goalPosition_;
-    Position robotPosition_;
-    bool goalReceived_;
-
-    float goalBoundary_;
-    double maxIntrinsicCost_;
-};
-
-#endif
+#include "gridmap-navigation/globalNavPlannerRos.hpp"
 
 globalNavPlannerRos::globalNavPlannerRos()
     : nh("global_planner"),
@@ -172,10 +53,6 @@ void globalNavPlannerRos::allocateMapMemory()
     // cost map in traversable region
     gridMap_.add("intrinsicCost");
     gridMap_.add("totalCost");
-
-    // path info
-    gridMap_.add("previousGridPosition0");
-    gridMap_.add("previousGridPosition1");
 
     // local map
     gridMap_.add("laser_raw");
@@ -314,7 +191,7 @@ void globalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
         return;
     }
     clk::time_point t2 = clk::now();
-    std::cout << "Duration update Intrinsic Cost map: " << duration(t2 - t1) << "ms" << std::endl;
+    std::cout << "Duration update Intrinsic Cost map: " << duration(t2 - t1) << "us" << std::endl;
 
     // t1 = clk::now();
     std::vector<Position> poseList;
@@ -325,7 +202,7 @@ void globalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
         return;
     }
     t2 = clk::now();
-    std::cout << "Duration finding path : " << duration(t2 - t1) << "ms" << std::endl;
+    std::cout << "Duration finding path : " << duration(t2 - t1) << "us" << std::endl;
 
     // publish msgs
     nav_msgs::Path pathMsg;
@@ -430,6 +307,7 @@ bool globalNavPlannerRos::updateIntrinsicCost(double &maxCost)
 
 bool globalNavPlannerRos::findGradientPath(const std::string &costLayer, std::vector<Position> &poseList)
 {
+    clk::time_point startTime = clk::now();
     // lock goal position, robot position
     const auto &robotPosition = robotPosition_;
     const auto &goalPosition = goalPosition_;
@@ -458,6 +336,8 @@ bool globalNavPlannerRos::findGradientPath(const std::string &costLayer, std::ve
         Index searchSize(inflationSize_, inflationSize_);
         Index bufferSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
         SubmapIterator subIter(gridMap_, centerIndex - searchSize, bufferSize);
+        bool validNearFound = false;
+
         for (subIter; !subIter.isPastEnd(); ++subIter)
         {
             const auto &searchIndex = *subIter;
@@ -475,9 +355,15 @@ bool globalNavPlannerRos::findGradientPath(const std::string &costLayer, std::ve
             {
                 minCost = searchCost;
                 minIndex = searchIndex;
+                validNearFound = true;
             }
 
-        } // end of near grid search loop -- finding minimum cost cell
+        } // end of nearest search loop -- finding minimum cost cell
+        if (!validNearFound)
+        {
+            ROS_WARN("No valid path found. Maybe blocked");
+            return false;
+        }
 
         Position nextPosition;
         gridMap_.getPosition(minIndex, nextPosition);
@@ -538,7 +424,7 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
         }
     }
     clk::time_point t2 = clk::now();
-    std::cout << "Duration laser_inflated mapping: " << duration(t2 - t1) << "ms" << std::endl;
+    std::cout << "Duration laser_inflated mapping: " << duration(t2 - t1) << "us" << std::endl;
 
     // visualize local map
     bool getSubmap;
@@ -546,21 +432,6 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     std::cout << "Submap published " << std::endl;
 
     gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_inflated"];
-    // const auto &intrinsicCostmap = gridMap_["intrinsicCost"];
-    // const auto &laserCostmap = gridMap_["laser_inflated"];
-    // auto &totalCostmap = gridMap_["totalCost"];
-    // for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
-    // {
-    //     size_t i = iter.getLinearIndex();
-    //     const float intrinsicCost = intrinsicCostmap(i);
-    //     const float laserCost = laserCostmap(i);
-    //     float &totalCost = totalCostmap(i);
-
-    //     if (!(std::isfinite(intrinsicCost) || std::isfinite(laserCost)))
-    //         continue;
-
-    //     totalCost = intrinsicCost + laserCost;
-    // }
 
     // find path and publish
     std::vector<Position> poseList;

@@ -431,18 +431,24 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     publishMap(gridMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
     std::cout << "Submap published " << std::endl;
 
+    // total Costmap
     gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_inflated"];
 
     // find path and publish
     std::vector<Position> poseList;
     findGradientPath("totalCost", poseList);
-    std::cout << "find path" << std::endl;
+
+    //
+    // add eband function
+    //
+    
     nav_msgs::Path pathMsg;
     toRosMsg(poseList, pathMsg);
     pubPath.publish(pathMsg);
 
     publishMap(gridMap_.getSubmap(robotPosition_, Length(100, 100), getSubmap), pubGridmap);
 
+    // intrinsicCost recovery
     gridMap_["totalCost"] -= gridMap_["laser_inflated"];
     resetLocalMapMemory();
 }

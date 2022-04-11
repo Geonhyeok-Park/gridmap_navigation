@@ -34,7 +34,7 @@ float getDist(const Position &pos1, const Position &pos2)
     return (float)sqrt(pow(pos1.x() - pos2.x(), 2) + pow(pos1.y() - pos2.y(), 2));
 }
 
-class globalNavPlannerRos
+class GlobalNavPlannerRos
 {
     const int OCCUPIED = 100;
     const int FREE = 0;
@@ -48,9 +48,9 @@ private:
     bool initialize();
 
 public:
-    globalNavPlannerRos();
+    GlobalNavPlannerRos();
 
-    virtual ~globalNavPlannerRos() { nh.shutdown(); }
+    virtual ~GlobalNavPlannerRos() { nh.shutdown(); }
 
     void loadParamServer();
 
@@ -78,18 +78,24 @@ private:
     ros::NodeHandle nh;
 
     ros::Publisher pubPath;
+    ros::Publisher pubEbandPath;
     ros::Publisher pubGridmap;
     ros::Publisher pubLaser;
     ros::Publisher pubLocalmap;
+
+    ros::Publisher pubBubble;
     ros::Subscriber subLaser;
     ros::Subscriber subGoal;
 
     std::string topicPathPub;
+    std::string topicEbandPathPub;
     std::string topicGridMapPub;
     std::string topicLaserPub;
     std::string topicLocalMapPub;
     std::string topicLaserSub;
     std::string topicGoalSub;
+
+    std::string topicBubblePub;
 
     ros::ServiceClient mapClient;
     nav_msgs::GetMap getMap;

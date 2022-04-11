@@ -1,6 +1,8 @@
 #include "gridmap-navigation/globalNavPlannerRos.hpp"
+#include "gridmap-navigation/elasticBands.hpp"
+#include "gridmap-navigation/elasticBandsRos.hpp"
 
-globalNavPlannerRos::globalNavPlannerRos()
+GlobalNavPlannerRos::GlobalNavPlannerRos()
     : nh("global_planner"),
       goalReceived_(false)
 {
@@ -16,22 +18,26 @@ globalNavPlannerRos::globalNavPlannerRos()
     allocateMapMemory();
 
     // 4. ROS subscriber, publisher
-    subGoal = nh.subscribe("/move_base_simple/goal", 10, &globalNavPlannerRos::goalCallback, this);
-    subLaser = nh.subscribe(topicLaserSub, 10, &globalNavPlannerRos::laserCallback, this);
+    subGoal = nh.subscribe("/move_base_simple/goal", 10, &GlobalNavPlannerRos::goalCallback, this);
+    subLaser = nh.subscribe(topicLaserSub, 10, &GlobalNavPlannerRos::laserCallback, this);
     pubGridmap = nh.advertise<grid_map_msgs::GridMap>(topicGridMapPub, 1);
     pubPath = nh.advertise<nav_msgs::Path>(topicPathPub, 10);
+    pubEbandPath = nh.advertise<nav_msgs::Path>(topicEbandPathPub, 10);
     pubLaser = nh.advertise<sensor_msgs::PointCloud2>(topicLaserPub, 1);
     pubLocalmap = nh.advertise<grid_map_msgs::GridMap>(topicLocalMapPub, 1);
+
+    pubBubble = nh.advertise<visualization_msgs::Marker>(topicBubblePub, 10);
+
 
     // 5. initialize map values
     if (!initialize())
     {
-        ROS_ERROR("globalNavPlannerRos initialization failed. Shut down process");
+        ROS_ERROR("GlobalNavPlannerRos initialization failed. Shut down process");
         nh.shutdown();
     }
 }
 
-void globalNavPlannerRos::waitOccupancyMap()
+void GlobalNavPlannerRos::waitOccupancyMap()
 {
     mapClient = nh.serviceClient<nav_msgs::GetMap>("/static_map");
     while (!mapClient.call(getMap))
@@ -43,7 +49,7 @@ void globalNavPlannerRos::waitOccupancyMap()
     occupancyMap_ = getMap.response.map;
 }
 
-void globalNavPlannerRos::allocateMapMemory()
+void GlobalNavPlannerRos::allocateMapMemory()
 {
     // static map
     gridMap_.add("raw");
@@ -59,18 +65,18 @@ void globalNavPlannerRos::allocateMapMemory()
     gridMap_.add("laser_inflated");
 }
 
-void globalNavPlannerRos::resetGridMapMemory()
+void GlobalNavPlannerRos::resetGridMapMemory()
 {
     gridMap_.clear("intrinsicCost");
 }
 
-void globalNavPlannerRos::resetLocalMapMemory()
+void GlobalNavPlannerRos::resetLocalMapMemory()
 {
     gridMap_["laser_raw"].setZero();
     gridMap_["laser_inflated"].setZero();
 }
 
-bool globalNavPlannerRos::initialize()
+bool GlobalNavPlannerRos::initialize()
 {
     // global map
     bool converted = GridMapRosConverter::fromOccupancyGrid(occupancyMap_, "raw", gridMap_);
@@ -95,7 +101,7 @@ bool globalNavPlannerRos::initialize()
     return true;
 }
 
-void globalNavPlannerRos::scaleLayerValue(const std::string &layer)
+void GlobalNavPlannerRos::scaleLayerValue(const std::string &layer)
 {
     auto &mapData = gridMap_[layer];
     for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
@@ -114,7 +120,7 @@ void globalNavPlannerRos::scaleLayerValue(const std::string &layer)
     }
 }
 
-void globalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &layerIn, int inflateState, const std::string &layerOut) const
+void GlobalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &layerIn, int inflateState, const std::string &layerOut) const
 {
     const auto &mapData = gridmap[layerIn];
     auto &inflatedData = gridmap[layerOut];
@@ -151,7 +157,7 @@ void globalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &lay
     }
 }
 
-void globalNavPlannerRos::getTraversableSearchspace()
+void GlobalNavPlannerRos::getTraversableSearchspace()
 {
     for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
     {
@@ -172,7 +178,7 @@ void globalNavPlannerRos::getTraversableSearchspace()
 //////////// Goal Callback ///////////////
 //////////////////////////////////////////
 
-void globalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
+void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
     goalReceived_ = true;
     gridMap_.clear("intrinsicCost");
@@ -204,10 +210,22 @@ void globalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     t2 = clk::now();
     std::cout << "Duration finding path : " << duration(t2 - t1) << "us" << std::endl;
 
-    // publish msgs
-    nav_msgs::Path pathMsg;
-    toRosMsg(poseList, pathMsg);
-    pubPath.publish(pathMsg);
+    ElasticBands eband(poseList, gridMap_, "intrinsicCost");
+    eband.updateElasticBand();
+    
+    // publish eband path msgs
+    ElasticBandsRosConverter ebandRos;
+    nav_msgs::Path bandedPathMsg;
+    visualization_msgs::MarkerArray bubbleMsg;
+    ebandRos.toROSMsg(eband, bubbleMsg, bandedPathMsg);
+    pubEbandPath.publish(bandedPathMsg);
+
+    // publish dijkstra path msgs
+    nav_msgs::Path rawPathMsg;
+    toRosMsg(poseList, rawPathMsg);
+    pubPath.publish(rawPathMsg);
+
+    
 
     // publish map
     bool getSubmap;
@@ -221,7 +239,7 @@ void globalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     }
 }
 
-bool globalNavPlannerRos::updateIntrinsicCost(double &maxCost)
+bool GlobalNavPlannerRos::updateIntrinsicCost(double &maxCost)
 {
     // lock goal position, robot position
     const auto &goalPosition = goalPosition_;
@@ -305,7 +323,7 @@ bool globalNavPlannerRos::updateIntrinsicCost(double &maxCost)
     return true;
 }
 
-bool globalNavPlannerRos::findGradientPath(const std::string &costLayer, std::vector<Position> &poseList)
+bool GlobalNavPlannerRos::findGradientPath(const std::string &costLayer, std::vector<Position> &poseList)
 {
     clk::time_point startTime = clk::now();
     // lock goal position, robot position
@@ -380,7 +398,7 @@ bool globalNavPlannerRos::findGradientPath(const std::string &costLayer, std::ve
 //////////// laser Callback //////////////
 //////////////////////////////////////////
 
-void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
+void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
 {
     // laserScan type conversion
     sensor_msgs::PointCloud2 pcWithDist;
@@ -453,7 +471,7 @@ void globalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     resetLocalMapMemory();
 }
 
-void globalNavPlannerRos::publishMap(const GridMap &gridmap, ros::Publisher publisher)
+void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, ros::Publisher publisher)
 {
     if (publisher.getNumSubscribers() < 1)
         return;
@@ -463,18 +481,21 @@ void globalNavPlannerRos::publishMap(const GridMap &gridmap, ros::Publisher publ
     publisher.publish(msg);
 }
 
-void globalNavPlannerRos::loadParamServer()
+void GlobalNavPlannerRos::loadParamServer()
 {
-    nh.param<std::string>("input_cloud_topic", topicLaserSub, "laserScan");
-    nh.param<std::string>("input_cloud_topic", topicGridMapPub, "gridmap");
-    nh.param<std::string>("input_cloud_topic", topicPathPub, "path");
+    nh.param<std::string>("input_cloud_topic", topicLaserSub, "/laserScan");
+    nh.param<std::string>("input_cloud_topic", topicGridMapPub, "/gridmap");
+    nh.param<std::string>("path_raw", topicPathPub, "/path_raw");
+    nh.param<std::string>("eband_path", topicEbandPathPub, "/path_banded");
+    nh.param<std::string>("bubble", topicBubblePub, "/elastic_bands");
+
     nh.param<int>("test", inflationSize_, 3);
     nh.param<std::string>("test2", topicLaserSub, "/tim581_front/scan");
     nh.param<std::string>("test3", topicLaserPub, "/scan");
     nh.param<std::string>("test4", topicLocalMapPub, "localmap");
 }
 
-void globalNavPlannerRos::toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const
+void GlobalNavPlannerRos::toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const
 {
     msg.header.frame_id = occupancyMap_.header.frame_id;
     msg.header.stamp = ros::Time::now();

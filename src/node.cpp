@@ -7,7 +7,7 @@
 int main(int argc, char **argv) {
     ros::init(argc, argv, "global_nav_planner");
 
-    globalNavPlannerRos node;
+    GlobalNavPlannerRos node;
 
     ros::Duration(1.0).sleep(); // Need this to get the TF caches fill up.
 

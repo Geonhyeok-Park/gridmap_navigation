@@ -210,9 +210,15 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     t2 = clk::now();
     std::cout << "Duration finding path : " << duration(t2 - t1) << "us" << std::endl;
 
-    ElasticBands eband(poseList, gridMap_, "intrinsicCost");
+    t1 = clk::now();
+    ElasticBands eband(poseList, gridMap_, "obstacleCost");
+    std::cout << "Duration elastic band : " << duration(t2 - t1) << "us" << std::endl;
+
     eband.updateElasticBand();
-    
+    t2 = clk::now();
+    std::cout << "Duration elastic band : " << duration(t2 - t1) << "us" << std::endl;
+
+
     // publish eband path msgs
     ElasticBandsRosConverter ebandRos;
     nav_msgs::Path bandedPathMsg;
@@ -224,8 +230,6 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     nav_msgs::Path rawPathMsg;
     toRosMsg(poseList, rawPathMsg);
     pubPath.publish(rawPathMsg);
-
-    
 
     // publish map
     bool getSubmap;
@@ -239,7 +243,7 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     }
 }
 
-bool GlobalNavPlannerRos::updateIntrinsicCost(double &maxCost)
+bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
 {
     // lock goal position, robot position
     const auto &goalPosition = goalPosition_;
@@ -471,7 +475,7 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     resetLocalMapMemory();
 }
 
-void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, ros::Publisher publisher)
+void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, const ros::Publisher& publisher)
 {
     if (publisher.getNumSubscribers() < 1)
         return;

@@ -36,9 +36,9 @@ float getDist(const Position &pos1, const Position &pos2)
 
 class GlobalNavPlannerRos
 {
-    const int OCCUPIED = 100;
-    const int FREE = 0;
-    const int UNKNWON = -10;
+    const float OCCUPIED = 100;
+    const float FREE = 0;
+    const float UNKNWON = -10;
 
     // value in occupancy grid map
     const int OCC_MAP = 100;
@@ -68,7 +68,7 @@ public:
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
 
-    bool updateIntrinsicCost(double &maxCost);
+    bool updateIntrinsicCost(float &maxCost);
 
     bool findGradientPath(const std::string &layer, std::vector<Position> &poseList);
 
@@ -93,14 +93,13 @@ private:
     std::string topicLaserPub;
     std::string topicLocalMapPub;
     std::string topicLaserSub;
-    std::string topicGoalSub;
 
     std::string topicBubblePub;
 
     ros::ServiceClient mapClient;
     nav_msgs::GetMap getMap;
 
-    void publishMap(const GridMap &gridmap, ros::Publisher publisher);
+    static void publishMap(const GridMap &gridmap, const ros::Publisher& publisher);
 
     void toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const;
 
@@ -118,7 +117,7 @@ private:
     bool goalReceived_;
 
     float goalBoundary_;
-    double maxIntrinsicCost_;
+    float maxIntrinsicCost_;
 };
 
 #endif

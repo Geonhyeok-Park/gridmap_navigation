@@ -3,8 +3,63 @@
 //
 #include "gridmap-navigation/elasticBands.hpp"
 
-ElasticBands::ElasticBands(const std::vector<Position> &poseList, const GridMap &occupancyMap, const std::string &layer)
-{
+ElasticBands::BubbleXYIR::BubbleXYIR(const Position &bubblePos, double bubbleRadius, int bubbleIndex) {
+    position_ = bubblePos;
+    radius_ = bubbleRadius;
+    index_ = bubbleIndex;
+}
+
+const Position &ElasticBands::BubbleXYIR::getPosition() const {
+    return position_;
+}
+
+void ElasticBands::BubbleXYIR::setPosition(const Position &position) {
+    position_ = position;
+}
+
+const double &ElasticBands::BubbleXYIR::getRadius() const {
+    return radius_;
+}
+
+void ElasticBands::BubbleXYIR::setRadius(double radius) {
+    radius_ = radius;
+}
+
+const int &ElasticBands::BubbleXYIR::getIndex() const {
+    return index_;
+}
+
+void ElasticBands::BubbleXYIR::setIndex(int index) {
+    index_ = index;
+}
+
+bool ElasticBands::BubbleXYIR::isInside(const BubbleXYIR &bubble) {
+    if (getDist(position_, bubble.getPosition()) < bubble.getRadius())
+        return true;
+    else
+        return false;
+}
+
+bool ElasticBands::BubbleXYIR::hasValidSize() const {
+    if (radius_ < MIN_BUBBLE_RADIUS_M)
+        return false;
+
+    if (radius_ > MAX_BUBBLE_RADIUS_M)
+        return false;
+
+    return true;
+}
+
+const std::vector<ElasticBands::BubbleXYIR> &ElasticBands::getEbands() const {
+    return eband_;
+}
+
+std::string ElasticBands::getMapFrame() const {
+    return map_.getFrameId();
+}
+
+ElasticBands::ElasticBands(const std::vector<Position> &poseList, const GridMap &occupancyMap,
+                           const std::string &layer) {
     if (poseList.empty())
         throw std::length_error("pose Length is zero. Empty path");
 
@@ -16,27 +71,25 @@ ElasticBands::ElasticBands(const std::vector<Position> &poseList, const GridMap 
         throw std::runtime_error("creating elastic bands failed");
 }
 
-ElasticBands::~ElasticBands()
-{
+ElasticBands::~ElasticBands() {
     map_.clearAll();
     layer_.clear();
     pathList_.clear();
     eband_.clear();
 }
 
-double ElasticBands::minDistToObstacle(const Position &position)
-{
-    BubbleXYIR bubbleNoUse;
+double ElasticBands::minDistToObstacle(const Position &position) {
+    BubbleXYIR bubbleNoUse(position, 0, 0);
     double minDist = bubbleNoUse.MAX_BUBBLE_RADIUS_M;
 
     Index currentGridIndex;
     map_.getIndex(position, currentGridIndex);
 
     CircleIterator searchIter(map_, position, bubbleNoUse.MAX_BUBBLE_RADIUS_M);
-    for (searchIter; !searchIter.isPastEnd(); ++searchIter)
-    {
+    for (searchIter; !searchIter.isPastEnd(); ++searchIter) {
         const Index &searchIndex = *searchIter;
-        if (!map_.isInside(*searchIter))
+        Position searchPosition;
+        if (!map_.getPosition(searchIndex, searchPosition))
             continue;
 
         if (searchIndex.isApprox(currentGridIndex))
@@ -51,8 +104,6 @@ double ElasticBands::minDistToObstacle(const Position &position)
         if (std::abs(cellState - FREE) < EPSILON)
             continue;
 
-        Position searchPosition;
-        map_.getPosition(*searchIter, searchPosition);
         double distance = getDist(position, searchPosition);
         if (distance < minDist)
             minDist = distance;
@@ -61,12 +112,10 @@ double ElasticBands::minDistToObstacle(const Position &position)
     return minDist;
 }
 
-bool ElasticBands::createElasticBand()
-{
+bool ElasticBands::createElasticBand() {
     std::vector<BubbleXYIR> ebandRaw;
     // fill in EBContainer
-    for (int i = 0; i < pathList_.size(); ++i)
-    {
+    for (int i = 0; i < pathList_.size(); ++i) {
         const auto &waypoint = pathList_[i];
         BubbleXYIR bubble(waypoint, minDistToObstacle(waypoint), i);
 
@@ -77,23 +126,22 @@ bool ElasticBands::createElasticBand()
     const auto endBubble = ebandRaw.back();
     recursiveFilter(ebandRaw, startBubble, endBubble);
 
-    if (eband_.empty())
-    {
+    if (eband_.empty()) {
         std::cout << "Filtered elabtic bands has no elements after recursive construction." << std::endl;
         return false;
     }
 
-    for (auto& bubble : eband_)
-    {
-        if (!bubble.hasValidSize())
+    for (auto &bubble: eband_) {
+        if (!bubble.hasValidSize()) {
+            std::cout << "bubble size not valid." << std::endl;
             return false;
+        }
     }
 
-//    std::sort(eband_.begin(), eband_.end(), compareIndex);
+    std::sort(eband_.begin(), eband_.end(), compareIndex);
 
     // after sort, index reallocation
-    for (int i = 0; i < eband_.size(); ++i)
-    {
+    for (int i = 0; i < eband_.size(); ++i) {
         auto &bubble = eband_[i];
         bubble.setIndex(i);
     }
@@ -101,8 +149,8 @@ bool ElasticBands::createElasticBand()
     return true;
 }
 
-void ElasticBands::recursiveFilter(const std::vector<BubbleXYIR> &ebandRaw, const BubbleXYIR &startBubble, const BubbleXYIR &endBubble)
-{
+void ElasticBands::recursiveFilter(const std::vector<BubbleXYIR> &ebandRaw, const BubbleXYIR &startBubble,
+                                   const BubbleXYIR &endBubble) {
     int midIndex = (startBubble.getIndex() + endBubble.getIndex()) / 2;
     const auto midBubble = ebandRaw.at(midIndex);
     if (midIndex == startBubble.getIndex() || midIndex == endBubble.getIndex())
@@ -118,8 +166,7 @@ void ElasticBands::recursiveFilter(const std::vector<BubbleXYIR> &ebandRaw, cons
 }
 
 // TODO: make function real boolean
-bool ElasticBands::updateElasticBand()
-{
+bool ElasticBands::updateElasticBand() {
     viaPointsUpdate();
 
     deleteBubbleWhenDense();
@@ -129,11 +176,9 @@ bool ElasticBands::updateElasticBand()
     return true;
 }
 
-void ElasticBands::viaPointsUpdate()
-{
+void ElasticBands::viaPointsUpdate() {
     // viaPoint update
-    for (int bubbleIndex = 0; bubbleIndex < eband_.size(); ++bubbleIndex)
-    {
+    for (int bubbleIndex = 0; bubbleIndex < eband_.size(); ++bubbleIndex) {
         // pass first and last bubble for viapoint update
         if (bubbleIndex == eband_.front().getIndex() || bubbleIndex == eband_.back().getIndex())
             continue;
@@ -149,13 +194,12 @@ void ElasticBands::viaPointsUpdate()
     }
 }
 
-void ElasticBands::getTotalForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next, Position &totalForce)
-{
+void ElasticBands::getTotalForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next,
+                                 Position &totalForce) {
     totalForce = getRepulsiveForce(curr) + getContractionForce(prev, curr, next);
 }
 
-Position ElasticBands::getRepulsiveForce(const BubbleXYIR &currentBubble)
-{
+Position ElasticBands::getRepulsiveForce(const BubbleXYIR &currentBubble) {
     Position repulsiveForce;
 
     const auto &radius = currentBubble.getRadius();
@@ -164,21 +208,22 @@ Position ElasticBands::getRepulsiveForce(const BubbleXYIR &currentBubble)
     if (radius > currentBubble.MAX_BUBBLE_RADIUS_M)
         repulsiveForce.setZero();
 
-    else
-    {
+    else {
         Position dx(radius, 0);
         Position dy(0, radius);
 
         const auto constant = (currentBubble.MAX_BUBBLE_RADIUS_M - radius) / (2 * radius);
-        repulsiveForce.x() = GLOBAL_REPULSION_GAIN * (constant * minDistToObstacle(position - dx) - minDistToObstacle(position + dx));
-        repulsiveForce.y() = GLOBAL_REPULSION_GAIN * (constant * minDistToObstacle(position - dy) - minDistToObstacle(position + dy));
+        repulsiveForce.x() = GLOBAL_REPULSION_GAIN *
+                             (constant * minDistToObstacle(position - dx) - minDistToObstacle(position + dx));
+        repulsiveForce.y() = GLOBAL_REPULSION_GAIN *
+                             (constant * minDistToObstacle(position - dy) - minDistToObstacle(position + dy));
     }
 
     return repulsiveForce;
 }
 
-Position ElasticBands::getContractionForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next)
-{
+Position
+ElasticBands::getContractionForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next) const {
     Position contractionForce;
 
     const auto &previousVector = prev.getPosition();
@@ -194,13 +239,10 @@ Position ElasticBands::getContractionForce(const BubbleXYIR &prev, const BubbleX
     return contractionForce;
 }
 
-void ElasticBands::deleteBubbleWhenDense()
-{
-    for (int bubbleIndex = 0; bubbleIndex < eband_.size();)
-    {
+void ElasticBands::deleteBubbleWhenDense() {
+    for (int bubbleIndex = 0; bubbleIndex < eband_.size();) {
         // pass first and last bubble
-        if (bubbleIndex == eband_.front().getIndex() || bubbleIndex == eband_.back().getIndex())
-        {
+        if (bubbleIndex == eband_.front().getIndex() || bubbleIndex == eband_.back().getIndex()) {
             ++bubbleIndex;
             continue;
         }
@@ -216,21 +258,16 @@ void ElasticBands::deleteBubbleWhenDense()
     }
 }
 
-void ElasticBands::addBubbleWhenSparse()
-{
-    for (int bubbleIndex = 0; bubbleIndex < eband_.size();)
-    {
+void ElasticBands::addBubbleWhenSparse() {
+    for (int bubbleIndex = 0; bubbleIndex < eband_.size();) {
         auto front = bubbleIndex;
         auto back = bubbleIndex + 1;
         auto &bubbleFront = eband_[front];
         auto &bubbleBack = eband_[back];
-        if (bubbleOverlaps(bubbleFront, bubbleBack))
-        {
+        if (bubbleOverlaps(bubbleFront, bubbleBack)) {
             ++bubbleIndex;
             continue;
-        }
-        else
-        {
+        } else {
             Position mid = (bubbleFront.getPosition() + bubbleBack.getPosition()) / 2;
             BubbleXYIR bubbleNew(mid, minDistToObstacle(mid), -1);
 

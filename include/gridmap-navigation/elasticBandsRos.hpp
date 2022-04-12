@@ -7,8 +7,6 @@
 class ElasticBandsRosConverter
 {
 private:
-    visualization_msgs::MarkerArray bubbleMsg_;
-    nav_msgs::Path pathMsg_;
 
 public:
     ElasticBandsRosConverter() = default;
@@ -16,14 +14,14 @@ public:
 
     void toROSMsg(const ElasticBands &data, visualization_msgs::MarkerArray &bubbleMsg, nav_msgs::Path &pathMsg)
     {
-        const auto& eband = data.getEbands();
+        const auto& eband = data.getBubbles();
 
-        bubbleMsg_.markers.resize(eband.size());
-        pathMsg_.poses.resize(eband.size());
+        bubbleMsg.markers.resize(eband.size());
+        pathMsg.poses.resize(eband.size());
 
-        pathMsg_.header.frame_id = data.getMapFrame();
-        pathMsg_.header.seq++;
-        pathMsg_.header.stamp = ros::Time::now();
+        pathMsg.header.frame_id = data.getMapFrame();
+        pathMsg.header.seq++;
+        pathMsg.header.stamp = ros::Time::now();
 
         for (int i = 0; i < eband.size(); ++i)
         {
@@ -37,8 +35,8 @@ public:
             bubble.ns = "eband";
             bubble.id = i;
 
-            pathMsg_.poses.at(i).header.frame_id = data.getMapFrame();
-            pathMsg_.poses.at(i).header.stamp = ros::Time::now();
+            pathMsg.poses.at(i).header.frame_id = data.getMapFrame();
+            pathMsg.poses.at(i).header.stamp = ros::Time::now();
 
             // position
             bubble.pose.position.x = eband.at(i).getPosition().x();
@@ -49,7 +47,7 @@ public:
             bubble.pose.orientation.z = 0;
             bubble.pose.orientation.w = 1;
 
-            pathMsg_.poses.at(i).pose = bubble.pose;
+            pathMsg.poses.at(i).pose = bubble.pose;
 
             // color
             bubble.color.a = 0.3;
@@ -62,9 +60,9 @@ public:
             bubble.scale.y = eband.at(i).getRadius() * 2.0;
             bubble.scale.z = 0.05;
 
-            bubble.lifetime = ros::Duration(0.1);
+            bubble.lifetime = ros::Duration();
 
-            bubbleMsg_.markers.at(i) = bubble;
+            bubbleMsg.markers.at(i) = bubble;
         }
     }
 };

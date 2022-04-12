@@ -4,7 +4,8 @@
 
 GlobalNavPlannerRos::GlobalNavPlannerRos()
     : nh("global_planner"),
-      goalReceived_(false)
+      goalReceived_(false),
+      intrinsicCostUpdated_(false)
 {
     // 1. load ROS params
     loadParamServer();
@@ -26,8 +27,7 @@ GlobalNavPlannerRos::GlobalNavPlannerRos()
     pubLaser = nh.advertise<sensor_msgs::PointCloud2>(topicLaserPub, 1);
     pubLocalmap = nh.advertise<grid_map_msgs::GridMap>(topicLocalMapPub, 1);
 
-    pubBubble = nh.advertise<visualization_msgs::Marker>(topicBubblePub, 10);
-
+    pubBubble = nh.advertise<visualization_msgs::MarkerArray>(topicBubblePub, 10);
 
     // 5. initialize map values
     if (!initialize())
@@ -180,8 +180,14 @@ void GlobalNavPlannerRos::getTraversableSearchspace()
 
 void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
-    goalReceived_ = true;
-    gridMap_.clear("intrinsicCost");
+    if (!goalReceived_)
+        goalReceived_ = true;
+
+    if (intrinsicCostUpdated_)
+    {
+        intrinsicCostUpdated_ = false;
+        gridMap_.clear("intrinsicCost");
+    }
 
     goalPosition_(0) = msg->pose.position.x;
     goalPosition_(1) = msg->pose.position.y;
@@ -190,16 +196,32 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     robotPosition_(0) = tf_.BaseToMap.translation.x;
     robotPosition_(1) = tf_.BaseToMap.translation.y;
 
+    Position midPosition = (goalPosition_ + robotPosition_) / 2;
+
     clk::time_point t1 = clk::now();
-    if (!updateIntrinsicCost(maxIntrinsicCost_))
+    clk::time_point t2;
+    double searchSpaceRadius = getDist(midPosition, robotPosition_);
+    while (diffmilisec(t2 - t1) < GRADIENT_TIMEOUT)
     {
-        ROS_ERROR("update IntrinsicCost failed.");
+        if (updateIntrinsicCost(searchSpaceRadius, maxIntrinsicCost_))
+        {
+            intrinsicCostUpdated_ = true;
+            break;
+        }
+        else
+        {
+            t2 = clk::now();
+            gridMap_.clear("intrinsicCost");
+            searchSpaceRadius += getDist(midPosition, robotPosition_);
+        }
+    }
+
+    if (!intrinsicCostUpdated_)
+    {
+        ROS_ERROR("GRADIENT TIMEOUT!!  Update IntrinsicCost failed.");
         return;
     }
-    clk::time_point t2 = clk::now();
-    std::cout << "Duration update Intrinsic Cost map: " << duration(t2 - t1) << "us" << std::endl;
 
-    // t1 = clk::now();
     std::vector<Position> poseList;
     if (!findGradientPath("intrinsicCost", poseList))
     {
@@ -207,29 +229,22 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
         poseList.clear();
         return;
     }
-    t2 = clk::now();
-    std::cout << "Duration finding path : " << duration(t2 - t1) << "us" << std::endl;
 
-    t1 = clk::now();
-    ElasticBands eband(poseList, gridMap_, "obstacleCost");
-    std::cout << "Duration elastic band : " << duration(t2 - t1) << "us" << std::endl;
+    // ElasticBands eband(poseList, gridMap_, "raw");
+    // eband.updateElasticBand();
 
-    eband.updateElasticBand();
-    t2 = clk::now();
-    std::cout << "Duration elastic band : " << duration(t2 - t1) << "us" << std::endl;
-
-
-    // publish eband path msgs
-    ElasticBandsRosConverter ebandRos;
-    nav_msgs::Path bandedPathMsg;
-    visualization_msgs::MarkerArray bubbleMsg;
-    ebandRos.toROSMsg(eband, bubbleMsg, bandedPathMsg);
-    pubEbandPath.publish(bandedPathMsg);
-
-    // publish dijkstra path msgs
+    // publish msgs
     nav_msgs::Path rawPathMsg;
+    // nav_msgs::Path bandedPathMsg;
+    // visualization_msgs::MarkerArray bubbleMsg;
+    // ElasticBandsRosConverter ebandRos;
+    // publish dijkstra path msgs
     toRosMsg(poseList, rawPathMsg);
     pubPath.publish(rawPathMsg);
+    // // publish eband path msgs
+    // ebandRos.toROSMsg(eband, bubbleMsg, bandedPathMsg);
+    // pubEbandPath.publish(bandedPathMsg);
+    // pubBubble.publish(bubbleMsg);
 
     // publish map
     bool getSubmap;
@@ -243,12 +258,17 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     }
 }
 
-bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
+bool GlobalNavPlannerRos::updateIntrinsicCost(double searchSpaceRadius, float &maxCost)
 {
     // lock goal position, robot position
     const auto &goalPosition = goalPosition_;
     const auto &robotPosition = robotPosition_;
 
+    Index goalIndex, robotIndex;
+    gridMap_.getIndex(goalPosition, goalIndex);
+    gridMap_.getIndex(robotPosition, robotIndex);
+
+    // for performance, use direct access rather than map.at()
     const auto &intrinsicCostMap = gridMap_["intrinsicCost"];
 
     if (!gridMap_.isInside(goalPosition))
@@ -256,12 +276,6 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
         ROS_WARN("Goal is out of map region");
         return false;
     }
-
-    Index goalIndex;
-    gridMap_.getIndex(goalPosition, goalIndex);
-
-    Index robotIndex;
-    gridMap_.getIndex(robotPosition, robotIndex);
 
     std::queue<Index> gridCandidateList;
     gridCandidateList.push(goalIndex);
@@ -274,8 +288,8 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
     {
         Position waveFrontPosition;
         const auto waveFrontIndex = gridCandidateList.front();
-        gridMap_.getPosition(waveFrontIndex, waveFrontPosition);
         gridCandidateList.pop();
+        gridMap_.getPosition(waveFrontIndex, waveFrontPosition);
 
         Index nearestIndex(1, 1);
         Index searchSize(3, 3);
@@ -286,6 +300,7 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
             Position searchPosition;
             gridMap_.getPosition(searchIndex, searchPosition);
 
+            // only search nearby cell
             if (searchIndex.isApprox(waveFrontIndex))
                 continue;
 
@@ -294,13 +309,12 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
                 continue;
 
             // only search in region between goal and robot
-            double margin = 5.0; // check margin is needed or not
             const auto midPoint = (goalPosition + robotPosition) / 2;
-            if (getDist(midPoint, searchPosition) > getDist(goalPosition, midPoint) + margin)
+            double margin = 3.0;
+            if (getDist(midPoint, searchPosition) > searchSpaceRadius + margin)
                 continue;
 
             auto &searchCost = gridMap_.at("intrinsicCost", searchIndex);
-            // for performance, use direct access rather than map.at()
             const auto &waveFrontCost = intrinsicCostMap(waveFrontIndex(0), waveFrontIndex(1));
             const auto transitionCost = getDist(waveFrontPosition, searchPosition);
 
@@ -320,7 +334,7 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
 
     if (!std::isfinite(gridMap_.atPosition("intrinsicCost", robotPosition)))
     {
-        ROS_WARN("Goal is out of traversable region");
+        ROS_DEBUG("Could not find valid path from goal to robot");
         return false;
     }
 
@@ -329,7 +343,6 @@ bool GlobalNavPlannerRos::updateIntrinsicCost(float &maxCost)
 
 bool GlobalNavPlannerRos::findGradientPath(const std::string &costLayer, std::vector<Position> &poseList)
 {
-    clk::time_point startTime = clk::now();
     // lock goal position, robot position
     const auto &robotPosition = robotPosition_;
     const auto &goalPosition = goalPosition_;
@@ -348,49 +361,48 @@ bool GlobalNavPlannerRos::findGradientPath(const std::string &costLayer, std::ve
         // reached the goal, then stop propagating
         if (centerIndex.isApprox(goalIndex))
         {
-            ROS_INFO("findGradientPath: reached the goal");
+            ROS_DEBUG("findGradientPath: reached the goal");
             return true;
         }
 
-        Index minIndex = centerIndex;
+        bool validNearCellFound = false;
+        Index minCostIndex = centerIndex;
         double minCost = gridMap_.at(costLayer, centerIndex);
 
-        Index searchSize(inflationSize_, inflationSize_);
-        Index bufferSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
+        Index searchSize(1, 1);
+        Index bufferSize(3, 3);
         SubmapIterator subIter(gridMap_, centerIndex - searchSize, bufferSize);
-        bool validNearFound = false;
-
         for (subIter; !subIter.isPastEnd(); ++subIter)
         {
             const auto &searchIndex = *subIter;
-            Position searchPosition;
 
+            // pass invalid cost cell (unexplored)
             if (!std::isfinite(gridMap_.at(costLayer, searchIndex)))
                 continue;
 
+            // only search nearby cells
             if (searchIndex.isApprox(centerIndex))
                 continue;
 
             const auto &searchCost = gridMap_.at(costLayer, searchIndex);
-            const auto &waveFrontCost = gridMap_.at(costLayer, centerIndex);
             if (searchCost < minCost)
             {
                 minCost = searchCost;
-                minIndex = searchIndex;
-                validNearFound = true;
+                minCostIndex = searchIndex;
+                validNearCellFound = true;
             }
 
         } // end of nearest search loop -- finding minimum cost cell
-        if (!validNearFound)
+        if (!validNearCellFound)
         {
-            ROS_WARN("No valid path found. Maybe blocked");
+            ROS_WARN("No valid path found. Maybe costmap does not have enough search space");
             return false;
         }
 
         Position nextPosition;
-        gridMap_.getPosition(minIndex, nextPosition);
+        gridMap_.getPosition(minCostIndex, nextPosition);
         poseList.push_back(nextPosition);
-        pathCandidateList.push(minIndex);
+        pathCandidateList.push(minCostIndex);
         pathCandidateList.pop();
     }
 
@@ -437,45 +449,63 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
 
         gridMap_.at("laser_raw", pointIndex) = maxIntrinsicCost_;
 
-        Index startIndex(inflationSize_, inflationSize_);
-        Index subMapSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
-        SubmapIterator inflationIter(gridMap_, pointIndex - startIndex, subMapSize);
-        for (inflationIter; !inflationIter.isPastEnd(); ++inflationIter)
-        {
-            gridMap_.at("laser_inflated", *inflationIter) = gridMap_.at("laser_raw", pointIndex);
-        }
+        // inflation -- why do we use both inflation and elastic bands?
+        // TODO: split elastic bands and inflation
+        // Index startIndex(inflationSize_, inflationSize_);
+        // Index subMapSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
+        // SubmapIterator inflationIter(gridMap_, pointIndex - startIndex, subMapSize);
+        // for (inflationIter; !inflationIter.isPastEnd(); ++inflationIter)
+        // {
+        //     gridMap_.at("laser_inflated", *inflationIter) = gridMap_.at("laser_raw", pointIndex);
+        // }
     }
     clk::time_point t2 = clk::now();
-    std::cout << "Duration laser_inflated mapping: " << duration(t2 - t1) << "us" << std::endl;
+    // std::cout << "Duration laser_inflated mapping: " << duration(t2 - t1) << "us" << std::endl;
 
     // visualize local map
     bool getSubmap;
     publishMap(gridMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
-    std::cout << "Submap published " << std::endl;
+    // std::cout << "Submap published " << std::endl;
 
     // total Costmap
-    gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_inflated"];
+    gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_raw"];
 
+    t1 = clk::now();
     // find path and publish
     std::vector<Position> poseList;
     findGradientPath("totalCost", poseList);
+    t2 = clk::now();
+    // std::cout << "Duration find path: " << duration(t2 - t1) << "us" << std::endl;
 
-    //
-    // add eband function
-    //
-    
-    nav_msgs::Path pathMsg;
-    toRosMsg(poseList, pathMsg);
-    pubPath.publish(pathMsg);
+    t1 = clk::now();
+    ElasticBands eband(poseList, gridMap_, "laser_raw");
+    t2 = clk::now();
+
+    eband.updateElasticBand();
+    // std::cout << "Duration update elastic band: " << duration(t2 - t1) << "us" << std::endl;
+
+
+    // publish msgs
+    nav_msgs::Path rawPathMsg;
+    nav_msgs::Path bandedPathMsg;
+    visualization_msgs::MarkerArray bubbleMsg;
+    ElasticBandsRosConverter ebandRos;
+    // publish dijkstra path msgs
+    toRosMsg(poseList, rawPathMsg);
+    pubPath.publish(rawPathMsg);
+    // publish eband path msgs
+    ebandRos.toROSMsg(eband, bubbleMsg, bandedPathMsg);
+    pubEbandPath.publish(bandedPathMsg);
+    pubBubble.publish(bubbleMsg);
 
     publishMap(gridMap_.getSubmap(robotPosition_, Length(100, 100), getSubmap), pubGridmap);
 
     // intrinsicCost recovery
-    gridMap_["totalCost"] -= gridMap_["laser_inflated"];
+    gridMap_["totalCost"] -= gridMap_["laser_raw"];
     resetLocalMapMemory();
 }
 
-void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, const ros::Publisher& publisher)
+void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, const ros::Publisher &publisher)
 {
     if (publisher.getNumSubscribers() < 1)
         return;
@@ -493,10 +523,10 @@ void GlobalNavPlannerRos::loadParamServer()
     nh.param<std::string>("eband_path", topicEbandPathPub, "/path_banded");
     nh.param<std::string>("bubble", topicBubblePub, "/elastic_bands");
 
-    nh.param<int>("test", inflationSize_, 3);
+    nh.param<int>("test", inflationSize_, 4);
     nh.param<std::string>("test2", topicLaserSub, "/tim581_front/scan");
     nh.param<std::string>("test3", topicLaserPub, "/scan");
-    nh.param<std::string>("test4", topicLocalMapPub, "localmap");
+    nh.param<std::string>("test4", topicLocalMapPub, "/localmap");
 }
 
 void GlobalNavPlannerRos::toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const

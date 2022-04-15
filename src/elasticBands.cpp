@@ -1,7 +1,7 @@
 //
 // Created by Ikhyeon Cho on 22. 4. 8..
 //
-#include "gridmap-navigation/elasticBands.hpp"
+#include "global_planner_ros/elasticBands.hpp"
 #include <iostream>
 
 ElasticBands::BubbleXYIR::BubbleXYIR(const Position &bubblePos, double bubbleRadius, int bubbleIndex)

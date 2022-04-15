@@ -1,3 +1,6 @@
+#ifndef CLOUD_MANAGER_HPP
+#define CLOUD_MANAGER_HPP
+
 // TF
 #include <geometry_msgs/TransformStamped.h>
 
@@ -317,3 +320,5 @@ void CloudManager<pointType>::pubNormalArrow(
 
   publisher.publish(marker);
 }
+
+#endif

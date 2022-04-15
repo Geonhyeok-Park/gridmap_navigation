@@ -1,12 +1,11 @@
 #ifndef GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 #define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 
+#include "global_planner_ros/TFManager.hpp"
+
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>
 #include <grid_map_ros/GridMapRosConverter.hpp>
-
-// TF manager
-#include "gridmap-navigation/TFManager.hpp"
 
 // ROS msgs
 #include <nav_msgs/GetMap.h>
@@ -23,18 +22,10 @@
 #include <queue>
 
 #include <chrono>
-
 #define duration(a) std::chrono::duration_cast<std::chrono::microseconds>(a).count()
-#define diffmilisec(a) std::chrono::duration_cast<std::chrono::milliseconds>(a).count()
-
 typedef std::chrono::high_resolution_clock clk;
 
 using namespace grid_map;
-
-float getDist(const Position &pos1, const Position &pos2)
-{
-    return (float)sqrt(pow(pos1.x() - pos2.x(), 2) + pow(pos1.y() - pos2.y(), 2));
-}
 
 class GlobalNavPlannerRos
 {
@@ -45,8 +36,6 @@ class GlobalNavPlannerRos
     // value in occupancy grid map
     const int OCC_MAP = 100;
     const int FREE_MAP = 0;
-
-    const int GRADIENT_TIMEOUT = 1000; // ms
 
 private:
     bool initialize();
@@ -72,11 +61,9 @@ public:
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
 
-    bool updateIntrinsicCost(double searchSpaceRadius, float &maxCost);
-
-    bool findGradientPath(const std::string &layer, std::vector<Position> &poseList);
-
     void laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
+
+    void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
 
 private:
     ros::NodeHandle nh;
@@ -97,32 +84,28 @@ private:
     std::string topicLaserPub;
     std::string topicLocalMapPub;
     std::string topicLaserSub;
-
     std::string topicBubblePub;
 
     ros::ServiceClient mapClient;
     nav_msgs::GetMap getMap;
 
     static void publishMap(const GridMap &gridmap, const ros::Publisher &publisher);
-
     void toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const;
 
 private:
+    nav_msgs::OccupancyGrid occupancyMap_;
     GridMap gridMap_;
+    Position goalPosition_;
+    Position robotPosition_;
+    std::vector<Position> globalPath_;
 
 private:
     RosTFManager tf_;
     laser_geometry::LaserProjection laser2pc_;
 
-    nav_msgs::OccupancyGrid occupancyMap_;
-    int inflationSize_;
-    Position goalPosition_;
-    Position robotPosition_;
     bool goalReceived_;
-    bool intrinsicCostUpdated_;
-
-    float goalBoundary_;
     float maxIntrinsicCost_;
+    int inflationSize_;
 };
 
 #endif

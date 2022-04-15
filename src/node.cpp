@@ -1,7 +1,6 @@
 //
-// Created by isr on 22. 3. 17..
+// Created by Ikhyeon Cho on 22. 3. 17..
 //
-
 #include "globalNavPlannerRos.cpp"
 
 int main(int argc, char **argv) {

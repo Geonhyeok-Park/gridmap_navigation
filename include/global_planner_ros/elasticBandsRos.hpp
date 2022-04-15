@@ -1,4 +1,4 @@
-#include <gridmap-navigation/elasticBands.hpp>
+#include <global_planner_ros/elasticBands.hpp>
 
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>

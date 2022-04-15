@@ -1,3 +1,6 @@
+#ifndef TF_MANAGER_ROS_HPP
+#define TF_MANAGER_ROS_HPP
+
 #include <ros/ros.h>
 
 // ROS TF2
@@ -147,3 +150,5 @@ void RosTFManager::getRPYfromMsg(const geometry_msgs::Transform &tfMsg, double &
 
   m.getRPY(roll, pitch, yaw);
 }
+
+#endif

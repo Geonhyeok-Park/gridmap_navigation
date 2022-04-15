@@ -90,7 +90,6 @@ private:
     nav_msgs::GetMap getMap;
 
     static void publishMap(const GridMap &gridmap, const ros::Publisher &publisher);
-    void toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const;
 
 private:
     nav_msgs::OccupancyGrid occupancyMap_;
@@ -102,6 +101,8 @@ private:
 private:
     RosTFManager tf_;
     laser_geometry::LaserProjection laser2pc_;
+    DijkstraPathRosConverter dijkstraRos_;
+    ElasticBandsRosConverter ebandRos_;
 
     bool goalReceived_;
     float maxIntrinsicCost_;

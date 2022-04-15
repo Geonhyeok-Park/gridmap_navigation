@@ -142,8 +142,11 @@ bool DijkstraSearch::updateCostmap(double searchRadius)
     return true;
 }
 
+// TODO: fix to improve speed
 bool DijkstraSearch::findPath()
 {
+    path_.clear();
+
     auto costMap = mapPtr_->get(costLayer_);
 
     Index robotIndex, goalIndex;
@@ -159,7 +162,6 @@ bool DijkstraSearch::findPath()
 
         if (currentCellIndex.isApprox(goalIndex))
         {
-            std::cout << "found path!" << std::endl;
             return true;
         }
 

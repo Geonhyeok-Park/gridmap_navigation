@@ -1,7 +1,8 @@
-#include "global_planner_ros/globalNavPlannerRos.hpp"
-#include "global_planner_ros/dijkstraSearch.hpp"
-#include "global_planner_ros/elasticBands.hpp"
-#include "global_planner_ros/elasticBandsRos.hpp"
+#include <global_planner_ros/globalNavPlannerRos.hpp>
+#include <global_planner_ros/dijkstraSearch.hpp>
+#include <global_planner_ros/dijkstraSearchRos.hpp>
+#include <global_planner_ros/elasticBands.hpp>
+#include <global_planner_ros/elasticBandsRos.hpp>
 
 GlobalNavPlannerRos::GlobalNavPlannerRos()
     : nh("global_planner"),
@@ -203,7 +204,7 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     // publish dijkstra path msgs
     globalPath_ = globalPlanner.getPath();
     nav_msgs::Path rawPathMsg;
-    toRosMsg(globalPath_, rawPathMsg);
+    dijkstraRos_.toRosMsg(globalPath_, rawPathMsg);
     pubPath.publish(rawPathMsg);
 
     // publish map
@@ -228,6 +229,9 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
 {
     clk::time_point t1, t2;
 
+    if (!goalReceived_)
+        return;
+
     // update robot position
     tf_.getTF(msg->header.stamp);
     robotPosition_(0) = tf_.BaseToMap.translation.x;
@@ -236,10 +240,11 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
 
     // publish global path
     DijkstraSearch globalPlanner(gridMap_, "traversable_global", "intrinsicCost",
-                                 robotPosition_, goalPosition_);
+                                 robotPosition, goalPosition_);
     globalPlanner.findPath();
+    globalPath_ = globalPlanner.getPath();
     nav_msgs::Path rawPathMsg;
-    toRosMsg(globalPath_, rawPathMsg);
+    dijkstraRos_.toRosMsg(globalPath_, rawPathMsg);
     pubPath.publish(rawPathMsg);
 
     // laserScan type conversion
@@ -253,35 +258,25 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     pcl::fromROSMsg(pcWithDist, *cloudM);
     pubLaser.publish(pcWithDist);
 
-    if (!goalReceived_)
-        return;
-
     // update Sensor map && visualize
     updateSensorMap(cloudM);
     bool getSubmap;
     publishMap(gridMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
 
     // total Costmap
-    gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_raw"];
+    // gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_raw"];
 
-    // modify global path locally
+    // modify global path locally && visualize
     ElasticBands eband(globalPath_, gridMap_, "laser_raw");
     eband.updateElasticBand();
-
-    // publish msgs
     nav_msgs::Path bandedPathMsg;
     visualization_msgs::MarkerArray bubbleMsg;
-    ElasticBandsRosConverter ebandRos;
-    // publish dijkstra path msgs
-    // publish eband path msgs
-    ebandRos.toROSMsg(eband, bubbleMsg, bandedPathMsg);
+    ebandRos_.toROSMsg(eband, bubbleMsg, bandedPathMsg);
     pubEbandPath.publish(bandedPathMsg);
     pubBubble.publish(bubbleMsg);
 
-    publishMap(gridMap_.getSubmap(robotPosition_, Length(100, 100), getSubmap), pubGridmap);
-
     // intrinsicCost recovery
-    gridMap_["totalCost"] -= gridMap_["laser_raw"];
+    // gridMap_["totalCost"] -= gridMap_["laser_raw"];
     resetLocalMapMemory();
 }
 
@@ -327,21 +322,7 @@ void GlobalNavPlannerRos::loadParamServer()
     nh.param<std::string>("bubble", topicBubblePub, "/elastic_bands");
 
     nh.param<int>("test", inflationSize_, 4);
-    nh.param<std::string>("test2", topicLaserSub, "/tim581_front/sca");
+    nh.param<std::string>("test2", topicLaserSub, "/tim581_front/scan");
     nh.param<std::string>("test3", topicLaserPub, "/scan");
     nh.param<std::string>("test4", topicLocalMapPub, "/localmap");
-}
-
-void GlobalNavPlannerRos::toRosMsg(std::vector<Position> &poseList, nav_msgs::Path &msg) const
-{
-    msg.header.frame_id = occupancyMap_.header.frame_id;
-    msg.header.stamp = ros::Time::now();
-
-    for (const auto &pose : poseList)
-    {
-        geometry_msgs::PoseStamped poseMsg;
-        poseMsg.pose.position.x = pose.x();
-        poseMsg.pose.position.y = pose.y();
-        msg.poses.push_back(poseMsg);
-    }
 }

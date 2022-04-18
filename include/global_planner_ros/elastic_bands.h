@@ -55,9 +55,9 @@ private:
     const int OCCUPIED = 100;
 
 private:
-    const GridMap *mapPtr_;
+    const GridMap *map_ptr_;
     std::string layer_;
-    std::vector<Position> pathList_;
+    std::vector<Position> path_;
     std::vector<BubbleXYIR> eband_;
 
 public:
@@ -67,7 +67,7 @@ public:
     double GLOBAL_REPULSION_GAIN = -11.0;
 
 public:
-    ElasticBands(const std::vector<Position> &poseList, GridMap &occupancyMap, const std::string &layer);
+    ElasticBands(const std::vector<Position> &_path, GridMap &_occupancymap, const std::string &_layer);
 
     ~ElasticBands();
 
@@ -81,19 +81,19 @@ private:
     // bubble radius: min distance to obstacle
     bool createElasticBand();
 
-    double minDistToObstacle(const Position &position);
+    double minDistToObstacle(const Position &_position);
 
-    void recursiveFilter(const std::vector<BubbleXYIR> &ebandRaw, const BubbleXYIR &startBubble,
-                         const BubbleXYIR &endBubble);
+    void recursiveFilter(const std::vector<BubbleXYIR> &_eband_raw, const BubbleXYIR &_start_bubble,
+                         const BubbleXYIR &_end_bubble);
 
     // Update waypoints via force
     void updateBubbles();
 
-    void getTotalForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next, Position &totalForce);
+    void getTotalForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next, Position &_force_total);
 
-    Position getRepulsiveForce(const BubbleXYIR &currentBubble);
+    Position getRepulsiveForce(const BubbleXYIR &bubble_current);
 
-    Position getContractionForce(const BubbleXYIR &prev, const BubbleXYIR &curr, const BubbleXYIR &next) const;
+    Position getContractionForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next) const;
 
     // rearrange bubbles
     void deleteBubbleWhenDense();
@@ -101,23 +101,23 @@ private:
     void addBubbleWhenSparse();
 
 private:
-    static float getDist(const Position &pos1, const Position &pos2)
+    static float getDist(const Position &_pos1, const Position &_pos2)
     {
-        return (float)sqrt(pow(pos1.x() - pos2.x(), 2) + pow(pos1.y() - pos2.y(), 2));
+        return (float)sqrt(pow(_pos1.x() - _pos2.x(), 2) + pow(_pos1.y() - _pos2.y(), 2));
     }
 
-    bool bubbleOverlaps(const BubbleXYIR &bubble1, const BubbleXYIR &bubble2) const
+    bool bubbleOverlaps(const BubbleXYIR &bubble_1, const BubbleXYIR &bubble_2) const
     {
-        if (bubble1.getRadius() + bubble2.getRadius() <
-            getDist(bubble1.getPosition(), bubble2.getPosition()) / BETWEEN_THE_BANDS)
+        if (bubble_1.getRadius() + bubble_2.getRadius() <
+            getDist(bubble_1.getPosition(), bubble_2.getPosition()) / BETWEEN_THE_BANDS)
             return false;
         else
             return true;
     }
 
-    static bool compareIndex(const BubbleXYIR &bubble1, const BubbleXYIR &bubble2)
+    static bool compareIndex(const BubbleXYIR &bubble_1, const BubbleXYIR &bubble_2)
     {
-        return bubble1.getIndex() < bubble2.getIndex();
+        return bubble_1.getIndex() < bubble_2.getIndex();
     }
 };
 

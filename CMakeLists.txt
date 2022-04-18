@@ -87,9 +87,9 @@ include_directories(
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
-  src/globalNavPlannerRos.cpp 
-  src/dijkstraSearch.cpp 
-  src/elasticBands.cpp
+  src/global_planner_ros.cpp 
+  src/dijkstra_search.cpp 
+  src/elastic_bands.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -100,7 +100,7 @@ add_library(${PROJECT_NAME}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
- add_executable(gridmap_nav_planner 
+ add_executable(gridmap_planner 
  src/node.cpp 
  )
 
@@ -115,7 +115,7 @@ add_library(${PROJECT_NAME}
 # add_dependencies(gridmap_nav_planner ${PROJECT_NAME}_gencfg)
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(gridmap_nav_planner
+ target_link_libraries(gridmap_planner
    ${catkin_LIBRARIES}
    ${PROJECT_NAME}
  )

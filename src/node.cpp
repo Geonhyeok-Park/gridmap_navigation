@@ -1,10 +1,10 @@
 //
 // Created by Ikhyeon Cho on 22. 3. 17..
 //
-#include "globalNavPlannerRos.cpp"
+#include "global_planner_ros.cpp"
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "global_nav_planner");
+    ros::init(argc, argv, "global_planner");
 
     GlobalNavPlannerRos node;
 

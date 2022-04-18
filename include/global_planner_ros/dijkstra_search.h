@@ -23,22 +23,22 @@ class DijkstraSearch
     const float FREE = 0.f;
 
 private:
-    GridMap *mapPtr_;
-    std::string mapLayer_;
-    std::string costLayer_;
+    GridMap *map_ptr_;
+    std::string layer_obstacle_;
+    std::string layer_cost_;
 
-    Position goalPosition_;
-    Position robotPosition_;
+    Position position_goal_;
+    Position position_robot_;
 
     std::vector<Position> path_;
 
-    double maxCost_;
-    int timeLimit_ms;
+    double max_cost_;
+    int time_limit_ms;
 
 public:
 
-    DijkstraSearch(GridMap &map, const std::string &inputLayer, const std::string &costLayer,
-                   const Position &robotPosition, const Position &goalPosition);
+    DijkstraSearch(GridMap &_map, const std::string &_layer_obstacle, const std::string &_layer_cost,
+                   const Position &_position_robot, const Position &_position_goal);
     ~DijkstraSearch() = default;
 
     bool run();
@@ -47,8 +47,8 @@ public:
     bool findPath();
 
 private:
-    bool updateCostmap(double searchRadius);
-    float getDistance(const Position &pos1, const Position &pos2);
+    bool updateCostmap(double _searchRadius);
+    float getDistance(const Position &_pos1, const Position &_pos2);
 };
 
 #endif // GRIDMAP_NAVIGATION_DIJKSTRASEARCH_HPP

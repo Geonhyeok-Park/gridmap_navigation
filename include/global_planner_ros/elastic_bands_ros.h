@@ -1,4 +1,4 @@
-#include <global_planner_ros/elasticBands.hpp>
+#include <global_planner_ros/elastic_bands.h>
 
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>

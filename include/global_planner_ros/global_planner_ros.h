@@ -1,9 +1,9 @@
 #ifndef GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 #define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 
-#include <global_planner_ros/TFManager.hpp>
-#include <global_planner_ros/dijkstraSearchRos.hpp>
-#include <global_planner_ros/elasticBandsRos.hpp>
+#include <global_planner_ros/tf_manager.h>
+#include <global_planner_ros/dijkstra_search_ros.h>
+#include <global_planner_ros/elastic_bands_ros.h>
 
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>
@@ -56,7 +56,7 @@ public:
     void resetGridMapMemory();
     void resetLocalMapMemory();
 
-    void gridInflation(GridMap &gridMap, const std::string &layerIn, int inflateState, const std::string &layerOut) const;
+    void gridInflation(GridMap &gridmap, const std::string &layer_in, int inflate_state, const std::string &layer_out) const;
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
 
@@ -67,45 +67,45 @@ public:
 private:
     ros::NodeHandle nh;
 
-    ros::Publisher pubPath;
-    ros::Publisher pubEbandPath;
-    ros::Publisher pubGridmap;
-    ros::Publisher pubLaser;
-    ros::Publisher pubLocalmap;
+    ros::Publisher pub_path;
+    ros::Publisher pub_eband_path;
+    ros::Publisher pub_gridmap;
+    ros::Publisher pub_laser;
+    ros::Publisher pub_localmap;
+    ros::Publisher pub_bubble;
 
-    ros::Publisher pubBubble;
-    ros::Subscriber subLaser;
-    ros::Subscriber subGoal;
+    ros::Subscriber sub_laser;
+    ros::Subscriber sub_goal;
 
-    std::string topicPathPub;
-    std::string topicEbandPathPub;
-    std::string topicGridMapPub;
-    std::string topicLaserPub;
-    std::string topicLocalMapPub;
-    std::string topicLaserSub;
-    std::string topicBubblePub;
+    std::string topic_path_pub;
+    std::string topic_eband_path_pub;
+    std::string topic_gridmap_pub;
+    std::string topic_laser_pub;
+    std::string topic_localmap_pub;
+    std::string topic_laser_sub;
+    std::string topic_bubble_pub;
 
-    ros::ServiceClient mapClient;
-    nav_msgs::GetMap getMap;
+    ros::ServiceClient map_client;
+    nav_msgs::GetMap get_map;
 
     static void publishMap(const GridMap &gridmap, const ros::Publisher &publisher);
 
 private:
-    nav_msgs::OccupancyGrid occupancyMap_;
-    GridMap gridMap_;
-    Position goalPosition_;
-    Position robotPosition_;
-    std::vector<Position> globalPath_;
+    nav_msgs::OccupancyGrid occupancymap_;
+    GridMap gridmap_;
+    Position position_goal_;
+    Position position_robot_;
+    std::vector<Position> global_path_;
 
 private:
     RosTFManager tf_;
     laser_geometry::LaserProjection laser2pc_;
-    DijkstraPathRosConverter dijkstraRos_;
-    ElasticBandsRosConverter ebandRos_;
+    DijkstraPathRosConverter path_converter_;
+    ElasticBandsRosConverter eband_converter_;
 
-    bool goalReceived_;
-    float maxIntrinsicCost_;
-    int inflationSize_;
+    bool goal_received_;
+    float max_intrinsic_cost_;
+    int inflation_size_;
 };
 
 #endif

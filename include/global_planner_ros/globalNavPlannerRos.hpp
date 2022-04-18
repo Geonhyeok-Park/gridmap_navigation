@@ -1,7 +1,9 @@
 #ifndef GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 #define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 
-#include "global_planner_ros/TFManager.hpp"
+#include <global_planner_ros/TFManager.hpp>
+#include <global_planner_ros/dijkstraSearchRos.hpp>
+#include <global_planner_ros/elasticBandsRos.hpp>
 
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>
@@ -54,10 +56,7 @@ public:
     void resetGridMapMemory();
     void resetLocalMapMemory();
 
-    void scaleLayerValue(const std::string &layer);
     void gridInflation(GridMap &gridMap, const std::string &layerIn, int inflateState, const std::string &layerOut) const;
-
-    void getTraversableSearchspace();
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
 

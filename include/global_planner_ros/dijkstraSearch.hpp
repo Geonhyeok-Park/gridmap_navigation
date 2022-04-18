@@ -20,6 +20,7 @@ using namespace grid_map;
 
 class DijkstraSearch
 {
+    const float FREE = 0.f;
 
 private:
     GridMap *mapPtr_;

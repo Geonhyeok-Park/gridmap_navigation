@@ -1,8 +1,4 @@
 #include <global_planner_ros/globalNavPlannerRos.hpp>
-#include <global_planner_ros/dijkstraSearch.hpp>
-#include <global_planner_ros/dijkstraSearchRos.hpp>
-#include <global_planner_ros/elasticBands.hpp>
-#include <global_planner_ros/elasticBandsRos.hpp>
 
 GlobalNavPlannerRos::GlobalNavPlannerRos()
     : nh("global_planner"),
@@ -54,16 +50,13 @@ void GlobalNavPlannerRos::allocateMapMemory()
 {
     // static map
     gridMap_.add("raw");
-    gridMap_.add("obstacleCost");
-    gridMap_.add("traversable_global");
+    gridMap_.add("staticObstacle");
 
     // cost map in traversable region
     gridMap_.add("intrinsicCost");
-    gridMap_.add("totalCost");
 
     // local map
-    gridMap_.add("laser_raw");
-    gridMap_.add("laser_inflated");
+    gridMap_.add("sensorObstacle");
 }
 
 void GlobalNavPlannerRos::resetGridMapMemory()
@@ -73,8 +66,7 @@ void GlobalNavPlannerRos::resetGridMapMemory()
 
 void GlobalNavPlannerRos::resetLocalMapMemory()
 {
-    gridMap_["laser_raw"].setZero();
-    gridMap_["laser_inflated"].setZero();
+    gridMap_["sensorObstacle"].setZero();
 }
 
 bool GlobalNavPlannerRos::initialize()
@@ -87,38 +79,16 @@ bool GlobalNavPlannerRos::initialize()
         return false;
     }
 
-    gridInflation(gridMap_, "raw", OCC_MAP, "obstacleCost");
-    // scaleLayerValue("obstacleCost");
-    getTraversableSearchspace();
+    gridInflation(gridMap_, "raw", OCC_MAP, "staticObstacle");
 
     ROS_INFO("Conversion done. Global map initialized.");
 
     // local map
-    gridMap_["laser_raw"].setConstant(FREE);
-    gridMap_["laser_inflated"].setConstant(FREE);
+    gridMap_["sensorObstacle"].setConstant(FREE);
 
     ROS_INFO("Local map initialized to zero.");
 
     return true;
-}
-
-void GlobalNavPlannerRos::scaleLayerValue(const std::string &layer)
-{
-    auto &mapData = gridMap_[layer];
-    for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
-    {
-        const size_t i = iter.getLinearIndex();
-        float &cellVal = mapData(i);
-
-        if (!std::isfinite(cellVal))
-            cellVal = OCCUPIED;
-
-        if (std::abs(cellVal - OCC_MAP) < FLT_EPSILON)
-            cellVal = OCCUPIED;
-
-        if (std::abs(cellVal - FREE_MAP) < FLT_EPSILON)
-            cellVal = FREE;
-    }
 }
 
 void GlobalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &layerIn, int inflateState, const std::string &layerOut) const
@@ -158,23 +128,6 @@ void GlobalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &lay
     }
 }
 
-void GlobalNavPlannerRos::getTraversableSearchspace()
-{
-    for (GridMapIterator iter(gridMap_); !iter.isPastEnd(); ++iter)
-    {
-        const auto &cellIndex = *iter;
-        const auto &cellState = gridMap_.at("obstacleCost", cellIndex);
-
-        if (!std::isfinite(cellState))
-            continue;
-
-        if (cellState != OCCUPIED)
-        {
-            gridMap_.at("traversable_global", cellIndex) = FREE;
-        }
-    }
-}
-
 //////////////////////////////////////////
 /////////                     ////////////
 /////////    Goal Callback    ////////////
@@ -193,7 +146,7 @@ void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPt
     robotPosition_(0) = tf_.BaseToMap.translation.x;
     robotPosition_(1) = tf_.BaseToMap.translation.y;
 
-    DijkstraSearch globalPlanner(gridMap_, "traversable_global", "intrinsicCost",
+    DijkstraSearch globalPlanner(gridMap_, "staticObstacle", "intrinsicCost",
                                  robotPosition_, goalPosition_);
 
     if (!globalPlanner.run())
@@ -239,7 +192,7 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     const Position &robotPosition = robotPosition_;
 
     // publish global path
-    DijkstraSearch globalPlanner(gridMap_, "traversable_global", "intrinsicCost",
+    DijkstraSearch globalPlanner(gridMap_, "staticObstacle", "intrinsicCost",
                                  robotPosition, goalPosition_);
     globalPlanner.findPath();
     globalPath_ = globalPlanner.getPath();
@@ -263,11 +216,8 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     bool getSubmap;
     publishMap(gridMap_.getSubmap(robotPosition, Length(20, 20), getSubmap), pubLocalmap);
 
-    // total Costmap
-    // gridMap_["totalCost"] = gridMap_["intrinsicCost"] + gridMap_["laser_raw"];
-
     // modify global path locally && visualize
-    ElasticBands eband(globalPath_, gridMap_, "laser_raw");
+    ElasticBands eband(globalPath_, gridMap_, "sensorObstacle");
     eband.updateElasticBand();
     nav_msgs::Path bandedPathMsg;
     visualization_msgs::MarkerArray bubbleMsg;
@@ -275,8 +225,6 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     pubEbandPath.publish(bandedPathMsg);
     pubBubble.publish(bubbleMsg);
 
-    // intrinsicCost recovery
-    // gridMap_["totalCost"] -= gridMap_["laser_raw"];
     resetLocalMapMemory();
 }
 
@@ -289,17 +237,7 @@ void GlobalNavPlannerRos::updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::
         if (!gridMap_.getIndex(point, pointIndex))
             continue;
 
-        gridMap_.at("laser_raw", pointIndex) = maxIntrinsicCost_;
-
-        // inflation -- why do we use both inflation and elastic bands?
-        // TODO: split elastic bands and inflation
-        // Index startIndex(inflationSize_, inflationSize_);
-        // Index subMapSize(2 * inflationSize_ + 1, 2 * inflationSize_ + 1);
-        // SubmapIterator inflationIter(gridMap_, pointIndex - startIndex, subMapSize);
-        // for (inflationIter; !inflationIter.isPastEnd(); ++inflationIter)
-        // {
-        //     gridMap_.at("laser_inflated", *inflationIter) = gridMap_.at("laser_raw", pointIndex);
-        // }
+        gridMap_.at("sensorObstacle", pointIndex) = maxIntrinsicCost_;
     }
 }
 

@@ -13,7 +13,6 @@ DijkstraSearch::DijkstraSearch(GridMap &map, const std::string &inputLayer, cons
     robotPosition_ = robotPosition;
     goalPosition_ = goalPosition;
 
-    // construct appropriate map format
 }
 
 bool DijkstraSearch::run()
@@ -106,8 +105,12 @@ bool DijkstraSearch::updateCostmap(double searchRadius)
             if (searchIndex.isApprox(currentCellIndex))
                 continue;
 
-            // only search in given region
+            // pass unknown region
             if (!std::isfinite(mapPtr_->atPosition(mapLayer_, searchPosition)))
+                continue;
+
+            // only search in free space
+            if ((mapPtr_->atPosition(mapLayer_, searchPosition) - FREE) > __FLT_EPSILON__)
                 continue;
 
             // only search in region between goal and robot

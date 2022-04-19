@@ -10,7 +10,7 @@ public:
     DijkstraPathRosConverter() = default;
     ~DijkstraPathRosConverter() = default;
 
-    void toRosMsg(const std::vector<Position> &data, nav_msgs::Path &msg)
+    void toRosMsg(const std::vector<grid_map::Position> &data, nav_msgs::Path &msg)
     {
         msg.header.frame_id = "map";
         msg.header.stamp = ros::Time::now();

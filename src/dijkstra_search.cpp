@@ -3,19 +3,17 @@
 //
 #include <global_planner_ros/dijkstra_search.h>
 
-DijkstraSearch::DijkstraSearch(GridMap &_map, const std::string &_layer_obstacle, const std::string &_layer_cost,
-                               const Position &_position_robot, const Position &_position_goal)
+using namespace grid_map;
+
+DijkstraSearch::DijkstraSearch(GridMap &map, const std::string &layer, const Position &robot_pos, const Position &goal_pos)
 {
-    map_ptr_ = &_map;
-    layer_obstacle_ = _layer_obstacle;
-    layer_cost_ = _layer_cost;
-
-    position_robot_ = _position_robot;
-    position_goal_ = _position_goal;
-
+    map_ptr_ = &map;
+    layer_ = layer;
+    position_robot_ = robot_pos;
+    position_goal_ = goal_pos;
 }
 
-bool DijkstraSearch::run()
+bool DijkstraSearch::updateCostmap(const std::string &layer_cost)
 {
     Position position_mid = (position_goal_ + position_robot_) / 2;
     double search_radius = getDistance(position_mid, position_robot_);
@@ -24,7 +22,7 @@ bool DijkstraSearch::run()
     clk::time_point check_point = clk::now();
 
     time_limit_ms = 1000;
-    while (!updateCostmap(search_radius))
+    while (!updateCostmap(layer_cost, search_radius))
     {
         if (duration_ms(check_point - start_time) > time_limit_ms)
         {
@@ -33,15 +31,8 @@ bool DijkstraSearch::run()
         }
 
         check_point = clk::now();
-        map_ptr_->clear(layer_cost_);
+        map_ptr_->clear(layer_cost);
         search_radius += getDistance(position_mid, position_robot_);
-    }
-
-    if (!findPath())
-    {
-        std::cout << "clear Path" << std::endl;
-        path_.clear();
-        return false;
     }
 
     return true;
@@ -62,12 +53,12 @@ float DijkstraSearch::getDistance(const Position &_pos1, const Position &_pos2)
     return (float)sqrt(pow(_pos1.x() - _pos2.x(), 2) + pow(_pos1.y() - _pos2.y(), 2));
 }
 
-bool DijkstraSearch::updateCostmap(double _search_radius)
+bool DijkstraSearch::updateCostmap(const std::string &layer_cost, double search_radius)
 {
-    map_ptr_->clear(layer_cost_);
+    map_ptr_->clear(layer_cost);
 
-    const auto &map = map_ptr_->get(layer_obstacle_);
-    auto &cost_map = map_ptr_->get(layer_cost_);
+    const auto &map = map_ptr_->get(layer_);
+    auto &cost_map = map_ptr_->get(layer_cost);
 
     Index index_goal, index_robot;
     map_ptr_->getIndex(position_goal_, index_goal);
@@ -82,7 +73,7 @@ bool DijkstraSearch::updateCostmap(double _search_radius)
     std::queue<Index> grid_search_areas;
     grid_search_areas.push(index_goal);
 
-    map_ptr_->atPosition(layer_cost_, position_goal_) = 1.0;
+    map_ptr_->atPosition(layer_cost, position_goal_) = 1.0;
     max_cost_ = 1.0;
 
     while (!grid_search_areas.empty())
@@ -106,17 +97,17 @@ bool DijkstraSearch::updateCostmap(double _search_radius)
                 continue;
 
             // pass unknown region
-            if (!std::isfinite(map_ptr_->atPosition(layer_obstacle_, position_search)))
+            if (!std::isfinite(map_ptr_->atPosition(layer_, position_search)))
                 continue;
 
             // only search in free space
-            if ((map_ptr_->atPosition(layer_obstacle_, position_search) - FREE) > __FLT_EPSILON__)
+            if ((map_ptr_->atPosition(layer_, position_search) - FREE) > __FLT_EPSILON__)
                 continue;
 
             // only search in region between goal and robot
             const auto position_mid = (position_goal_ + position_robot_) / 2;
             double margin = 3.0;
-            if (getDistance(position_mid, position_search) > _search_radius + margin)
+            if (getDistance(position_mid, position_search) > search_radius + margin)
                 continue;
 
             auto &cost_search = cost_map(index_search(0), index_search(1));
@@ -150,7 +141,7 @@ bool DijkstraSearch::findPath()
 {
     path_.clear();
 
-    auto cost_map = map_ptr_->get(layer_cost_);
+    auto cost_map = map_ptr_->get(layer_);
 
     Index index_robot, index_goal;
     map_ptr_->getIndex(position_robot_, index_robot);

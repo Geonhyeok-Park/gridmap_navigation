@@ -11,15 +11,13 @@
 #include <algorithm>
 #include <iostream>
 
-using namespace grid_map;
-
 class ElasticBands
 {
 public:
     class BubbleXYIR
     {
     private:
-        Position position_;
+        grid_map::Position position_;
         int index_;
         double radius_;
 
@@ -28,13 +26,13 @@ public:
         double MIN_BUBBLE_RADIUS_M = 0.3;
 
     public:
-        BubbleXYIR(const Position &bubblePos, double bubbleRadius, int bubbleIndex);
+        BubbleXYIR(const grid_map::Position &bubblePos, double bubbleRadius, int bubbleIndex);
 
         ~BubbleXYIR() = default;
 
-        const Position &getPosition() const;
+        const grid_map::Position &getPosition() const;
 
-        void setPosition(const Position &position);
+        void setPosition(const grid_map::Position &position);
 
         const double &getRadius() const;
 
@@ -55,9 +53,9 @@ private:
     const int OCCUPIED = 100;
 
 private:
-    const GridMap *map_ptr_;
+    const grid_map::GridMap *map_ptr_;
     std::string layer_;
-    std::vector<Position> path_;
+    std::vector<grid_map::Position> path_;
     std::vector<BubbleXYIR> eband_;
 
 public:
@@ -67,7 +65,7 @@ public:
     double GLOBAL_REPULSION_GAIN = -11.0;
 
 public:
-    ElasticBands(const std::vector<Position> &_path, GridMap &_occupancymap, const std::string &_layer);
+    ElasticBands(const std::vector<grid_map::Position> &_path, grid_map::GridMap &_occupancymap, const std::string &_layer);
 
     ~ElasticBands();
 
@@ -81,7 +79,7 @@ private:
     // bubble radius: min distance to obstacle
     bool createElasticBand();
 
-    double minDistToObstacle(const Position &_position);
+    double minDistToObstacle(const grid_map::Position &_position);
 
     void recursiveFilter(const std::vector<BubbleXYIR> &_eband_raw, const BubbleXYIR &_start_bubble,
                          const BubbleXYIR &_end_bubble);
@@ -89,11 +87,11 @@ private:
     // Update waypoints via force
     void updateBubbles();
 
-    void getTotalForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next, Position &_force_total);
+    void getTotalForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next, grid_map::Position &_force_total);
 
-    Position getRepulsiveForce(const BubbleXYIR &bubble_current);
+    grid_map::Position getRepulsiveForce(const BubbleXYIR &bubble_current);
 
-    Position getContractionForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next) const;
+    grid_map::Position getContractionForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next) const;
 
     // rearrange bubbles
     void deleteBubbleWhenDense();
@@ -101,7 +99,7 @@ private:
     void addBubbleWhenSparse();
 
 private:
-    static float getDist(const Position &_pos1, const Position &_pos2)
+    static float getDist(const grid_map::Position &_pos1, const grid_map::Position &_pos2)
     {
         return (float)sqrt(pow(_pos1.x() - _pos2.x(), 2) + pow(_pos1.y() - _pos2.y(), 2));
     }

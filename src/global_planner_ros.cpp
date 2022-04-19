@@ -1,7 +1,11 @@
 #include <global_planner_ros/global_planner_ros.h>
 
+using namespace grid_map;
+
 GlobalNavPlannerRos::GlobalNavPlannerRos()
     : nh("global_planner"),
+      map_converter_(nh),
+      map_({"raw", "staticObstacle", "intrinsicCost", "sensorObstacle"}),
       goal_received_(false)
 {
     // 1. load ROS params
@@ -11,11 +15,23 @@ GlobalNavPlannerRos::GlobalNavPlannerRos()
     while (!tf_.getStaticTF("tim581_front"))
         ros::Duration(1.0).sleep();
 
-    // 3. allocate memories
-    waitOccupancyMap();
-    allocateMapMemory();
+    while (!map_converter_.queryOccupancyMap())
+    {
+        ROS_ERROR("No response for calling static map. Wait until map is valid.");
+        ros::Duration(1.0).sleep();
+    }
 
-    // 4. ROS subscriber, publisher
+    if (!map_converter_.convertOccupancyToGridmapLayer(map_, "raw"))
+    {
+        ROS_ERROR("Conversion from occupancy map to gridmap failed. Node shutdown");
+        nh.shutdown();
+    }
+    else
+    {
+        map_converter_.gridInflation(map_, "raw", "staticObstacle", OCCUPIED, inflation_size_);
+        ROS_INFO("Conversion and inflation done. Global map initialized.");
+    }
+
     sub_goal = nh.subscribe("/move_base_simple/goal", 10, &GlobalNavPlannerRos::goalCallback, this);
     sub_laser = nh.subscribe(topic_laser_sub, 10, &GlobalNavPlannerRos::laserCallback, this);
     pub_gridmap = nh.advertise<grid_map_msgs::GridMap>(topic_gridmap_pub, 1);
@@ -25,158 +41,30 @@ GlobalNavPlannerRos::GlobalNavPlannerRos()
     pub_localmap = nh.advertise<grid_map_msgs::GridMap>(topic_localmap_pub, 1);
 
     pub_bubble = nh.advertise<visualization_msgs::MarkerArray>(topic_bubble_pub, 10);
-
-    // 5. initialize map values
-    if (!initialize())
-    {
-        ROS_ERROR("GlobalNavPlannerRos initialization failed. Shut down process");
-        nh.shutdown();
-    }
 }
-
-void GlobalNavPlannerRos::waitOccupancyMap()
-{
-    map_client = nh.serviceClient<nav_msgs::GetMap>("/static_map");
-    while (!map_client.call(get_map))
-    {
-        ROS_ERROR("No response for calling static map. Wait until map is valid.");
-        ros::Duration(1.0).sleep();
-    }
-    ROS_INFO("Static map recieved. Start conversion to Grid map structure");
-    occupancymap_ = get_map.response.map;
-}
-
-void GlobalNavPlannerRos::allocateMapMemory()
-{
-    // static map
-    gridmap_.add("raw");
-    gridmap_.add("staticObstacle");
-
-    // cost map in traversable region
-    gridmap_.add("intrinsicCost");
-
-    // local map
-    gridmap_.add("sensorObstacle");
-}
-
-void GlobalNavPlannerRos::resetGridMapMemory()
-{
-    gridmap_.clear("intrinsicCost");
-}
-
-void GlobalNavPlannerRos::resetLocalMapMemory()
-{
-    gridmap_["sensorObstacle"].setZero();
-}
-
-bool GlobalNavPlannerRos::initialize()
-{
-    // global map
-    bool converted = GridMapRosConverter::fromOccupancyGrid(occupancymap_, "raw", gridmap_);
-    if (!converted)
-    {
-        ROS_ERROR("Conversion from occupancy map to gridmap failed.");
-        return false;
-    }
-
-    gridInflation(gridmap_, "raw", OCC_MAP, "staticObstacle");
-
-    ROS_INFO("Conversion done. Global map initialized.");
-
-    // local map
-    gridmap_["sensorObstacle"].setConstant(FREE);
-
-    ROS_INFO("Local map initialized to zero.");
-
-    return true;
-}
-
-void GlobalNavPlannerRos::gridInflation(GridMap &gridmap, const std::string &layer_in, int inflate_state, const std::string &layer_out) const
-{
-    const auto &map_data = gridmap[layer_in];
-    auto &inflated_data = gridmap[layer_out];
-
-    // copy first
-    gridmap[layer_out] = gridmap[layer_in];
-
-    // inflate
-    for (GridMapIterator iter(gridmap); !iter.isPastEnd(); ++iter)
-    {
-        size_t i = iter.getLinearIndex();
-        const auto &cell_index = *iter;
-        const float cell_state = map_data(i);
-        float &inflated_state = inflated_data(i);
-
-        if (!std::isfinite(cell_state))
-            continue;
-
-        if (std::abs(cell_state - inflate_state) > FLT_EPSILON)
-            continue;
-
-        Index start_index(inflation_size_, inflation_size_);
-        Index inflation_buffer(2 * inflation_size_ + 1, 2 * inflation_size_ + 1);
-        SubmapIterator sub_iter(gridmap, cell_index - start_index, inflation_buffer);
-        for (sub_iter; !sub_iter.isPastEnd(); ++sub_iter)
-        {
-            // check out of range while searching
-            Position search_pos;
-            if (!gridmap.getPosition(*sub_iter, search_pos))
-                continue;
-
-            gridmap.at(layer_out, *sub_iter) = cell_state;
-        }
-    }
-}
-
-//////////////////////////////////////////
-/////////                     ////////////
-/////////    Goal Callback    ////////////
-/////////                     ////////////
-//////////////////////////////////////////
 
 void GlobalNavPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
-    if (!goal_received_)
-        goal_received_ = true;
+    goal_received_ = true;
+    updateGoalPosition(msg->pose);
+    updateRobotPosition(msg->header.stamp);
 
-    position_goal_(0) = msg->pose.position.x;
-    position_goal_(1) = msg->pose.position.y;
-
-    tf_.getTF(msg->header.stamp);
-    position_robot_(0) = tf_.BaseToMap.translation.x;
-    position_robot_(1) = tf_.BaseToMap.translation.y;
-
-    DijkstraSearch global_planner(gridmap_, "staticObstacle", "intrinsicCost",
-                                 position_robot_, position_goal_);
-
-    if (!global_planner.run())
+    DijkstraSearch grid_search(map_, "staticObstacle", position_robot_, position_goal_);
+    if (!grid_search.updateCostmap("intrinsicCost"))
         return;
 
-    max_intrinsic_cost_ = global_planner.getMaxCost();
+    DijkstraSearch planner(map_, "intrinsicCost", position_robot_, position_goal_);
+    if (!planner.findPath())
+        return;
 
     // publish dijkstra path msgs
-    global_path_ = global_planner.getPath();
-    nav_msgs::Path rawPathMsg;
-    path_converter_.toRosMsg(global_path_, rawPathMsg);
-    pub_path.publish(rawPathMsg);
+    nav_msgs::Path msg_path_raw;
+    path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
+    pub_path.publish(msg_path_raw);
 
     // publish map
-    bool get_submap;
-    auto submap = gridmap_.getSubmap(position_robot_, Length(100, 100), get_submap);
-    if (!get_submap)
-        ROS_WARN("Could not get submap to publish.");
-    else
-    {
-        publishMap(submap, pub_gridmap);
-        ROS_INFO("Costmap has been published.");
-    }
+    publishSubmap(map_, pub_gridmap, Length(50, 50));
 }
-
-//////////////////////////////////////////
-/////////                      ///////////
-/////////    laser Callback    ///////////
-/////////                      ///////////
-//////////////////////////////////////////
 
 void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
 {
@@ -185,59 +73,52 @@ void GlobalNavPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &
     if (!goal_received_)
         return;
 
-    // update robot position
-    tf_.getTF(msg->header.stamp);
-    position_robot_(0) = tf_.BaseToMap.translation.x;
-    position_robot_(1) = tf_.BaseToMap.translation.y;
-    const Position &robot_position = position_robot_;
+    updateRobotPosition(msg->header.stamp);
 
     // publish global path
-    DijkstraSearch global_planner(gridmap_, "staticObstacle", "intrinsicCost",
-                                 robot_position, position_goal_);
-    global_planner.findPath();
-    global_path_ = global_planner.getPath();
-    nav_msgs::Path rawPathMsg;
-    path_converter_.toRosMsg(global_path_, rawPathMsg);
-    pub_path.publish(rawPathMsg);
+    DijkstraSearch planner(map_, "intrinsicCost", position_robot_, position_goal_);
+    planner.findPath();
+    nav_msgs::Path msg_path_raw;
+    path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
+    pub_path.publish(msg_path_raw);
 
     // laserScan type conversion
-    sensor_msgs::PointCloud2 pc_with_dist;
-    laser2pc_.projectLaser(*msg, pc_with_dist, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
+    sensor_msgs::PointCloud2 laser_cloud;
+    laser2pc_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
 
     // transform cloud && visualize
     const auto sensor_to_map = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);
-    pcl_ros::transformPointCloud("map", sensor_to_map, pc_with_dist, pc_with_dist);
+    pcl_ros::transformPointCloud("map", sensor_to_map, laser_cloud, laser_cloud);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_m(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::fromROSMsg(pc_with_dist, *cloud_m);
-    pub_laser.publish(pc_with_dist);
+    pcl::fromROSMsg(laser_cloud, *cloud_m);
+    pub_laser.publish(laser_cloud);
 
     // update Sensor map && visualize
     updateSensorMap(cloud_m);
-    bool get_submap;
-    publishMap(gridmap_.getSubmap(robot_position, Length(20, 20), get_submap), pub_localmap);
+    publishSubmap(map_, pub_localmap, Length(20, 20));
 
     // modify global path locally && visualize
-    ElasticBands eband(global_path_, gridmap_, "sensorObstacle");
+    ElasticBands eband(planner.getPath(), map_, "sensorObstacle");
     eband.updateElasticBand();
     nav_msgs::Path msg_banded_path;
     visualization_msgs::MarkerArray msg_bubble;
     eband_converter_.toROSMsg(eband, msg_bubble, msg_banded_path);
     pub_eband_path.publish(msg_banded_path);
     pub_bubble.publish(msg_bubble);
-
-    resetLocalMapMemory();
 }
 
 void GlobalNavPlannerRos::updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
 {
+    map_["sensorObstacle"].setZero();
+
     for (const auto &p : cloud->points)
     {
         Position point(p.x, p.y);
         Index point_index;
-        if (!gridmap_.getIndex(point, point_index))
+        if (!map_.getIndex(point, point_index))
             continue;
 
-        gridmap_.at("sensorObstacle", point_index) = max_intrinsic_cost_;
+        map_.at("sensorObstacle", point_index) = OCCUPIED;
     }
 }
 
@@ -249,6 +130,18 @@ void GlobalNavPlannerRos::publishMap(const GridMap &gridmap, const ros::Publishe
     grid_map_msgs::GridMap msg;
     GridMapRosConverter::toMessage(gridmap, msg);
     publisher.publish(msg);
+}
+
+void GlobalNavPlannerRos::publishSubmap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher, const grid_map::Length &length)
+{
+    bool get_submap;
+    auto submap = gridmap.getSubmap(position_robot_, length, get_submap);
+    if (!get_submap)
+        ROS_WARN("Could not get submap to publish.");
+    else
+    {
+        publishMap(submap, publisher);
+    }
 }
 
 void GlobalNavPlannerRos::loadParamServer()
@@ -263,4 +156,17 @@ void GlobalNavPlannerRos::loadParamServer()
     nh.param<std::string>("test2", topic_laser_sub, "/tim581_front/scan");
     nh.param<std::string>("test3", topic_laser_pub, "/scan");
     nh.param<std::string>("test4", topic_localmap_pub, "/localmap");
+}
+
+void GlobalNavPlannerRos::updateRobotPosition(const ros::Time &time)
+{
+    tf_.getTF(time);
+    position_robot_(0) = tf_.BaseToMap.translation.x;
+    position_robot_(1) = tf_.BaseToMap.translation.y;
+}
+
+void GlobalNavPlannerRos::updateGoalPosition(const geometry_msgs::Pose &goal_pose)
+{
+    position_goal_(0) = goal_pose.position.x;
+    position_goal_(1) = goal_pose.position.y;
 }

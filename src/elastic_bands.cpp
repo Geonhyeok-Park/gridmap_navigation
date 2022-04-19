@@ -4,6 +4,8 @@
 #include <global_planner_ros/elastic_bands.h>
 #include <iostream>
 
+using namespace grid_map;
+
 ElasticBands::BubbleXYIR::BubbleXYIR(const Position &_bubble_position, double _bubble_radius, int _bubble_index)
 {
     position_ = _bubble_position;

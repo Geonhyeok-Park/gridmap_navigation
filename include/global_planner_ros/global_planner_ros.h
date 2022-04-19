@@ -2,6 +2,7 @@
 #define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
 
 #include <global_planner_ros/tf_manager.h>
+#include <global_planner_ros/map_converter_ros.h>
 #include <global_planner_ros/dijkstra_search_ros.h>
 #include <global_planner_ros/elastic_bands_ros.h>
 
@@ -27,20 +28,13 @@
 #define duration(a) std::chrono::duration_cast<std::chrono::microseconds>(a).count()
 typedef std::chrono::high_resolution_clock clk;
 
-using namespace grid_map;
 
 class GlobalNavPlannerRos
 {
     const float OCCUPIED = 100;
     const float FREE = 0;
-    const float UNKNWON = -10;
-
-    // value in occupancy grid map
-    const int OCC_MAP = 100;
-    const int FREE_MAP = 0;
 
 private:
-    bool initialize();
 
 public:
     GlobalNavPlannerRos();
@@ -49,20 +43,15 @@ public:
 
     void loadParamServer();
 
-    void waitOccupancyMap();
-
-    void allocateMapMemory();
-
-    void resetGridMapMemory();
-    void resetLocalMapMemory();
-
-    void gridInflation(GridMap &gridmap, const std::string &layer_in, int inflate_state, const std::string &layer_out) const;
-
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
 
     void laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
 
     void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+
+    void updateRobotPosition(const ros::Time &time);
+
+    void updateGoalPosition(const geometry_msgs::Pose &goal_pose);
 
 private:
     ros::NodeHandle nh;
@@ -88,23 +77,22 @@ private:
     ros::ServiceClient map_client;
     nav_msgs::GetMap get_map;
 
-    static void publishMap(const GridMap &gridmap, const ros::Publisher &publisher);
+    static void publishMap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher);
+    void publishSubmap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher, const grid_map::Length &length);
 
 private:
-    nav_msgs::OccupancyGrid occupancymap_;
-    GridMap gridmap_;
-    Position position_goal_;
-    Position position_robot_;
-    std::vector<Position> global_path_;
+    grid_map::GridMap map_;
+    grid_map::Position position_goal_;
+    grid_map::Position position_robot_;
 
 private:
     RosTFManager tf_;
+    mapConverterRos map_converter_;
     laser_geometry::LaserProjection laser2pc_;
     DijkstraPathRosConverter path_converter_;
     ElasticBandsRosConverter eband_converter_;
 
     bool goal_received_;
-    float max_intrinsic_cost_;
     int inflation_size_;
 };
 

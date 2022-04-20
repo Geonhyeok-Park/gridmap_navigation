@@ -1,5 +1,5 @@
-#ifndef GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
-#define GRIDMAP_navigation_GLOBAL_NAV_PLANNER_HPP
+#ifndef GRIDMAP_NAVIGATION_GLOBAL_NAV_PLANNER_ROS_H
+#define GRIDMAP_NAVIGATION_GLOBAL_NAV_PLANNER_ROS_H
 
 #include <global_planner_ros/tf_manager.h>
 #include <global_planner_ros/map_converter_ros.h>
@@ -28,30 +28,30 @@
 #define duration(a) std::chrono::duration_cast<std::chrono::microseconds>(a).count()
 typedef std::chrono::high_resolution_clock clk;
 
-
-class GlobalNavPlannerRos
+class GlobalPlannerRos
 {
     const float OCCUPIED = 100;
     const float FREE = 0;
 
 private:
-
 public:
-    GlobalNavPlannerRos();
+    GlobalPlannerRos();
 
-    virtual ~GlobalNavPlannerRos() { nh.shutdown(); }
+    virtual ~GlobalPlannerRos() { nh.shutdown(); }
 
     void loadParamServer();
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
-
     void laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
 
     void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+    void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, double cost);
 
     void updateRobotPosition(const ros::Time &time);
-
     void updateGoalPosition(const geometry_msgs::Pose &goal_pose);
+
+    static void publishMap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher);
+    void publishSubmap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher, const grid_map::Length &length);
 
 private:
     ros::NodeHandle nh;
@@ -77,8 +77,8 @@ private:
     ros::ServiceClient map_client;
     nav_msgs::GetMap get_map;
 
-    static void publishMap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher);
-    void publishSubmap(const grid_map::GridMap &gridmap, const ros::Publisher &publisher, const grid_map::Length &length);
+    nav_msgs::Path path_msg_;
+    visualization_msgs::MarkerArray bubble_msg_;
 
 private:
     grid_map::GridMap map_;
@@ -86,14 +86,22 @@ private:
     grid_map::Position position_robot_;
 
 private:
+    // ROS transform
     RosTFManager tf_;
-    mapConverterRos map_converter_;
+
+    // type converter
+    MapConverterRos map_converter_;
     laser_geometry::LaserProjection laser2pc_;
     DijkstraPathRosConverter path_converter_;
     ElasticBandsRosConverter eband_converter_;
 
+    // source control flags
     bool goal_received_;
+
+    // parameters
     int inflation_size_;
+    double max_intrinsic_cost_;
+
 };
 
 #endif

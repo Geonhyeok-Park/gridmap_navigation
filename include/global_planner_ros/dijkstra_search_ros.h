@@ -12,6 +12,8 @@ public:
 
     void toRosMsg(const std::vector<grid_map::Position> &data, nav_msgs::Path &msg)
     {
+        msg.poses.clear();
+        
         msg.header.frame_id = "map";
         msg.header.stamp = ros::Time::now();
 

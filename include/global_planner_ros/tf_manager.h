@@ -1,5 +1,5 @@
-#ifndef TF_MANAGER_ROS_HPP
-#define TF_MANAGER_ROS_HPP
+#ifndef TF_MANAGER_ROS_H
+#define TF_MANAGER_ROS_H
 
 #include <ros/ros.h>
 

@@ -22,29 +22,24 @@ public:
         double radius_;
 
     public:
-        double MAX_BUBBLE_RADIUS_M = 1.5;
-        double MIN_BUBBLE_RADIUS_M = 0.3;
-
     public:
         BubbleXYIR(const grid_map::Position &bubblePos, double bubbleRadius, int bubbleIndex);
 
         ~BubbleXYIR() = default;
 
-        const grid_map::Position &getPosition() const;
+        inline const grid_map::Position &getPosition() const { return position_; }
 
-        void setPosition(const grid_map::Position &position);
+        inline void setPosition(const grid_map::Position &position) { position_ = position; }
 
-        const double &getRadius() const;
+        inline const double &getRadius() const { return radius_; }
 
-        void setRadius(double radius);
+        inline void setRadius(double radius) { radius_ = radius; }
 
-        const int &getIndex() const;
+        const int &getIndex() const { return index_; }
 
-        void setIndex(int index);
+        void setIndex(int index) { index_ = index; }
 
         bool isInside(const BubbleXYIR &bubble);
-
-        bool hasValidSize() const;
     };
 
 private:
@@ -55,42 +50,47 @@ private:
 private:
     const grid_map::GridMap *map_ptr_;
     std::string layer_;
-    std::vector<grid_map::Position> path_;
     std::vector<BubbleXYIR> eband_;
 
 public:
+    double MAX_BUBBLE_RADIUS_M = 1.5;
+    double MIN_BUBBLE_RADIUS_M = 0.2;
+
     double BETWEEN_THE_BANDS = 0.4;
     double FORCE_SCALING_FACTOR = 1.2;
     double GLOBAL_CONTRACTION_GAIN = 0.2; // usually half of between the bands
-    double GLOBAL_REPULSION_GAIN = -11.0;
+    double GLOBAL_REPULSION_GAIN = -0.2;
 
 public:
-    ElasticBands(const std::vector<grid_map::Position> &_path, grid_map::GridMap &_occupancymap, const std::string &_layer);
+    ElasticBands(grid_map::GridMap &occupancymap,
+                 const std::string &layer,
+                 const std::vector<grid_map::Position> &path);
 
     ~ElasticBands();
 
-    const std::vector<BubbleXYIR> &getBubbles() const;
+    inline const std::vector<BubbleXYIR> &getBubbles() const { return eband_; }
 
-    bool updateElasticBand();
+    bool update();
 
-    std::string getMapFrame() const;
+    inline std::string getFrameId() const { return map_ptr_->getFrameId(); }
 
 private:
     // bubble radius: min distance to obstacle
-    bool createElasticBand();
+    bool createElasticBand(const std::vector<grid_map::Position> &path);
 
-    double minDistToObstacle(const grid_map::Position &_position);
+    double nearestDistance(const grid_map::Position &current_position);
+
+    grid_map::Position getUnitNormal(const grid_map::Position &_prev, const grid_map::Position &_curr, const grid_map::Position &_next);
 
     void recursiveFilter(const std::vector<BubbleXYIR> &_eband_raw, const BubbleXYIR &_start_bubble,
                          const BubbleXYIR &_end_bubble);
 
     // Update waypoints via force
+
     void updateBubbles();
-
-    void getTotalForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next, grid_map::Position &_force_total);
-
+    void doValidUpdateOrStay(BubbleXYIR &bubble, const grid_map::Position &new_position);
+    void getTotalForceVector(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next, grid_map::Position &_force_total);
     grid_map::Position getRepulsiveForce(const BubbleXYIR &bubble_current);
-
     grid_map::Position getContractionForce(const BubbleXYIR &_prev, const BubbleXYIR &_curr, const BubbleXYIR &_next) const;
 
     // rearrange bubbles
@@ -117,6 +117,8 @@ private:
     {
         return bubble_1.getIndex() < bubble_2.getIndex();
     }
+
+    bool hasValidSize(const BubbleXYIR &bubble) const;
 };
 
 #endif // GRIDMAP_NAVIGATION_ELASTICBANDS_HPP

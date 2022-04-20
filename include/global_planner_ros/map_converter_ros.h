@@ -9,11 +9,11 @@
 #include <nav_msgs/GetMap.h>
 #include <grid_map_ros/GridMapRosConverter.hpp>
 
-class mapConverterRos
+class MapConverterRos
 {
 public:
-    mapConverterRos(ros::NodeHandle &_nh);
-    ~mapConverterRos() = default;
+    MapConverterRos(ros::NodeHandle &_nh);
+    ~MapConverterRos() = default;
 
     bool queryOccupancyMap();
     bool convertOccupancyToGridmapLayer(grid_map::GridMap &gridmap, const std::string &layer);
@@ -30,12 +30,12 @@ private:
 
 #endif // GRIDMAP_NAVIGATION_MAP_CONVERTER_H
 
-mapConverterRos::mapConverterRos(ros::NodeHandle &nh)
+MapConverterRos::MapConverterRos(ros::NodeHandle &nh)
 {
     map_client_ = nh.serviceClient<nav_msgs::GetMap>("/static_map");
 }
 
-bool mapConverterRos::queryOccupancyMap()
+bool MapConverterRos::queryOccupancyMap()
 {
     if (!map_client_.call(query_map_))
         return false;
@@ -45,13 +45,13 @@ bool mapConverterRos::queryOccupancyMap()
     return true;
 }
 
-bool mapConverterRos::convertOccupancyToGridmapLayer(grid_map::GridMap &gridmap, const std::string &layer)
+bool MapConverterRos::convertOccupancyToGridmapLayer(grid_map::GridMap &gridmap, const std::string &layer)
 {
     bool converted = grid_map::GridMapRosConverter::fromOccupancyGrid(occupancymap_, layer, gridmap);
     return converted;
 }
 
-void mapConverterRos::gridInflation(grid_map::GridMap &gridmap, const std::string &layer_in, const std::string &layer_out,
+void MapConverterRos::gridInflation(grid_map::GridMap &gridmap, const std::string &layer_in, const std::string &layer_out,
                                     int inflate_state, int inflation_size)
 {
     const auto &map_data = gridmap[layer_in];

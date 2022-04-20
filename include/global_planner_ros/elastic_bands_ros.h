@@ -1,3 +1,9 @@
+//
+// Created by Ikhyeon Cho on 22. 4. 8..
+//
+#ifndef GRIDMAP_NAVIGATION_ELASTICBANDS_ROS_H
+#define GRIDMAP_NAVIGATION_ELASTICBANDS_ROS_H
+
 #include <global_planner_ros/elastic_bands.h>
 
 #include <ros/ros.h>
@@ -7,21 +13,23 @@
 class ElasticBandsRosConverter
 {
 private:
-
 public:
     ElasticBandsRosConverter() = default;
     ~ElasticBandsRosConverter() = default;
 
-    void toROSMsg(const ElasticBands &data, visualization_msgs::MarkerArray &bubbleMsg, nav_msgs::Path &pathMsg)
+    void toROSMsg(const ElasticBands &data, visualization_msgs::MarkerArray &bubble_msg, nav_msgs::Path &path_msg)
     {
-        const auto& eband = data.getBubbles();
+        bubble_msg.markers.clear();
+        path_msg.poses.clear();
 
-        bubbleMsg.markers.resize(eband.size());
-        pathMsg.poses.resize(eband.size());
+        const auto &eband = data.getBubbles();
 
-        pathMsg.header.frame_id = data.getMapFrame();
-        pathMsg.header.seq++;
-        pathMsg.header.stamp = ros::Time::now();
+        bubble_msg.markers.resize(eband.size());
+        path_msg.poses.resize(eband.size());
+
+        path_msg.header.frame_id = data.getFrameId();
+        path_msg.header.seq++;
+        path_msg.header.stamp = ros::Time::now();
 
         for (int i = 0; i < eband.size(); ++i)
         {
@@ -30,13 +38,13 @@ public:
             // shape and header
             bubble.type = visualization_msgs::Marker::SPHERE;
             bubble.action = visualization_msgs::Marker::ADD;
-            bubble.header.frame_id = data.getMapFrame();
+            bubble.header.frame_id = data.getFrameId();
             bubble.header.stamp = ros::Time::now();
             bubble.ns = "eband";
             bubble.id = i;
 
-            pathMsg.poses.at(i).header.frame_id = data.getMapFrame();
-            pathMsg.poses.at(i).header.stamp = ros::Time::now();
+            path_msg.poses.at(i).header.frame_id = data.getFrameId();
+            path_msg.poses.at(i).header.stamp = ros::Time::now();
 
             // position
             bubble.pose.position.x = eband.at(i).getPosition().x();
@@ -47,7 +55,7 @@ public:
             bubble.pose.orientation.z = 0;
             bubble.pose.orientation.w = 1;
 
-            pathMsg.poses.at(i).pose = bubble.pose;
+            path_msg.poses.at(i).pose = bubble.pose;
 
             // color
             bubble.color.a = 0.3;
@@ -60,9 +68,11 @@ public:
             bubble.scale.y = eband.at(i).getRadius() * 2.0;
             bubble.scale.z = 0.05;
 
-            bubble.lifetime = ros::Duration();
+            bubble.lifetime = ros::Duration(0.1);
 
-            bubbleMsg.markers.at(i) = bubble;
+            bubble_msg.markers.at(i) = bubble;
         }
     }
 };
+
+#endif // GRIDMAP_NAVIGATION_ELASTICBANDS_ROS_H

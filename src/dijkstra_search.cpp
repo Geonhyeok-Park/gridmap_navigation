@@ -21,10 +21,9 @@ bool DijkstraSearch::updateCostmap(const std::string &layer_cost)
     clk::time_point start_time = clk::now();
     clk::time_point check_point = clk::now();
 
-    time_limit_ms = 1000;
     while (!updateCostmap(layer_cost, search_radius))
     {
-        if (duration_ms(check_point - start_time) > time_limit_ms)
+        if (duration_ms(check_point - start_time) > TIME_LIMIT_MS)
         {
             std::cout << "GRADIENT TIMEOUT!! Update Costmap Failed" << std::endl;
             return false;
@@ -36,21 +35,6 @@ bool DijkstraSearch::updateCostmap(const std::string &layer_cost)
     }
 
     return true;
-}
-
-std::vector<Position> &DijkstraSearch::getPath()
-{
-    return path_;
-}
-
-double DijkstraSearch::getMaxCost()
-{
-    return max_cost_;
-}
-
-float DijkstraSearch::getDistance(const Position &_pos1, const Position &_pos2)
-{
-    return (float)sqrt(pow(_pos1.x() - _pos2.x(), 2) + pow(_pos1.y() - _pos2.y(), 2));
 }
 
 bool DijkstraSearch::updateCostmap(const std::string &layer_cost, double search_radius)
@@ -155,9 +139,7 @@ bool DijkstraSearch::findPath()
         const auto index_current_cell = path_candidates.front();
 
         if (index_current_cell.isApprox(index_goal))
-        {
             return true;
-        }
 
         Index path_index;
         bool near_path_exists = false;
@@ -185,6 +167,7 @@ bool DijkstraSearch::findPath()
                 near_path_exists = true;
             }
         }
+
         if (!near_path_exists)
         {
             std::cout << "No valid path found with constructing cost map" << std::endl;

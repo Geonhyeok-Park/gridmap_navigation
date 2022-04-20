@@ -1,10 +1,10 @@
 #ifndef GRIDMAP_NAVIGATION_GLOBAL_NAV_PLANNER_ROS_H
 #define GRIDMAP_NAVIGATION_GLOBAL_NAV_PLANNER_ROS_H
 
-#include <global_planner_ros/tf_manager.h>
-#include <global_planner_ros/map_converter_ros.h>
-#include <global_planner_ros/dijkstra_search_ros.h>
-#include <global_planner_ros/elastic_bands_ros.h>
+#include <gridmap_navigation/tf_manager.h>
+#include <gridmap_navigation/map_converter_ros.h>
+#include <gridmap_navigation/dijkstra_search_ros.h>
+#include <gridmap_navigation/elastic_bands_ros.h>
 
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>

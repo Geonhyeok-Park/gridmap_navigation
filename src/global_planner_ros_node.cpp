@@ -1,7 +1,7 @@
 //
 // Created by Ikhyeon Cho on 22. 3. 17..
 //
-#include <global_planner_ros/global_planner_ros.h>
+#include <gridmap_navigation/global_planner_ros.h>
 
 using namespace grid_map;
 

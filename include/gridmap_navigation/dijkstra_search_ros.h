@@ -1,4 +1,4 @@
-#include <global_planner_ros/dijkstra_search.h>
+#include <gridmap_navigation/dijkstra_search.h>
 
 #include <ros/ros.h>
 #include <nav_msgs/Path.h>

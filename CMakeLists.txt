@@ -100,8 +100,8 @@ add_library(${PROJECT_NAME}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
- add_executable(gridmap_planner 
- src/node.cpp 
+ add_executable(gridmap_global_planner 
+ src/global_planner_ros_node.cpp 
  )
 
 ## Rename C++ executable without prefix
@@ -115,7 +115,7 @@ add_library(${PROJECT_NAME}
 # add_dependencies(gridmap_nav_planner ${PROJECT_NAME}_gencfg)
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(gridmap_planner
+ target_link_libraries(gridmap_global_planner
    ${catkin_LIBRARIES}
    ${PROJECT_NAME}
  )

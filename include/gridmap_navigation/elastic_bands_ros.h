@@ -4,7 +4,7 @@
 #ifndef GRIDMAP_NAVIGATION_ELASTICBANDS_ROS_H
 #define GRIDMAP_NAVIGATION_ELASTICBANDS_ROS_H
 
-#include <global_planner_ros/elastic_bands.h>
+#include <gridmap_navigation/elastic_bands.h>
 
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>

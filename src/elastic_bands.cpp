@@ -1,7 +1,7 @@
 //
 // Created by Ikhyeon Cho on 22. 4. 8..
 //
-#include <global_planner_ros/elastic_bands.h>
+#include <gridmap_navigation/elastic_bands.h>
 
 using namespace grid_map;
 

@@ -1,7 +1,7 @@
 //
 // Created by Ikhyeon Cho on 22. 4. 15.
 //
-#include <global_planner_ros/dijkstra_search.h>
+#include <gridmap_navigation/dijkstra_search.h>
 
 using namespace grid_map;
 

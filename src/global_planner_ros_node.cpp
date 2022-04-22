@@ -76,7 +76,7 @@ void GlobalPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg
 
     // laserScan type conversion
     sensor_msgs::PointCloud2 laser_cloud;
-    laser2pc_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
+    scan2cloud_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
 
     // transform cloud && visualize
     const auto sensor_to_map = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);

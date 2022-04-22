@@ -86,10 +86,14 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME}_global
   src/global_planner_ros.cpp 
   src/dijkstra_search.cpp 
   src/elastic_bands.cpp
+)
+add_library(${PROJECT_NAME}_local
+  src/local_planner_ros.cpp
+  src/dynamic_window_approach.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -102,6 +106,10 @@ add_library(${PROJECT_NAME}
 ## The recommended prefix ensures that target names across packages don't collide
  add_executable(gridmap_global_planner 
  src/global_planner_ros_node.cpp 
+ )
+
+ add_executable(gridmap_local_planner
+ src/local_planner_ros_node.cpp
  )
 
 ## Rename C++ executable without prefix
@@ -117,5 +125,10 @@ add_library(${PROJECT_NAME}
 ## Specify libraries to link a library or executable target against
  target_link_libraries(gridmap_global_planner
    ${catkin_LIBRARIES}
-   ${PROJECT_NAME}
+   ${PROJECT_NAME}_global
  )
+
+ target_link_libraries(gridmap_local_planner
+ ${catkin_LIBRARIES}
+ ${PROJECT_NAME}_local
+)

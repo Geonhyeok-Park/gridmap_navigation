@@ -19,7 +19,7 @@
 // ROS TF
 #include <tf/transform_broadcaster.h>
 
-class RosTFManager
+class TFManagerRos
 {
 private:
 public:
@@ -38,8 +38,8 @@ public:
 
 
 public:
-  RosTFManager();
-  ~RosTFManager() = default;
+  TFManagerRos();
+  ~TFManagerRos() = default;
 
   bool lookupTransform(const std::string &targetFrame,
                        const std::string &sourceFrame,
@@ -64,12 +64,12 @@ public:
 };
 
 // Definition
-RosTFManager::RosTFManager()
+TFManagerRos::TFManagerRos()
     : mTF2Listener(mTF2Buffer)
 {
 }
 
-bool RosTFManager::lookupTransform(const std::string &targetFrame,
+bool TFManagerRos::lookupTransform(const std::string &targetFrame,
                                    const std::string &sourceFrame, geometry_msgs::Transform &transform,
                                    ros::Time time)
 {
@@ -87,7 +87,7 @@ bool RosTFManager::lookupTransform(const std::string &targetFrame,
   return true;
 }
 
-void RosTFManager::sendTransform(const std::string &frame,
+void TFManagerRos::sendTransform(const std::string &frame,
                                  const std::string &childFrame, geometry_msgs::Transform &transform,
                                  ros::Time time)
 {
@@ -99,14 +99,14 @@ void RosTFManager::sendTransform(const std::string &frame,
 
   mTF2BroadCaster.sendTransform(tfMsg);
 }
-void RosTFManager::sendTransform(const std::string &frame,
+void TFManagerRos::sendTransform(const std::string &frame,
                                  const std::string &childFrame, tf::Transform &transform,
                                  ros::Time time)
 {
   mTFBroadCaster.sendTransform(tf::StampedTransform(transform, time, frame, childFrame));
 }
 
-bool RosTFManager::getTF(const ros::Time &time)
+bool TFManagerRos::getTF(const ros::Time &time)
 {
   if (!lookupTransform("map", "base_link", BaseToMap, time))
     return false;
@@ -120,7 +120,7 @@ bool RosTFManager::getTF(const ros::Time &time)
   return true;
 }
 
-bool RosTFManager::getStaticTF(const std::string &sensorFrame)
+bool TFManagerRos::getStaticTF(const std::string &sensorFrame)
 {
   if (!lookupTransform("base_link", sensorFrame, SensorToBase))
     return false;
@@ -128,7 +128,7 @@ bool RosTFManager::getStaticTF(const std::string &sensorFrame)
   return true;
 }
 
-geometry_msgs::Transform RosTFManager::fuseTransform(const geometry_msgs::Transform &AtoB,
+geometry_msgs::Transform TFManagerRos::fuseTransform(const geometry_msgs::Transform &AtoB,
                                                      const geometry_msgs::Transform &BtoC)
 {
   geometry_msgs::Transform AtoC;
@@ -142,7 +142,7 @@ geometry_msgs::Transform RosTFManager::fuseTransform(const geometry_msgs::Transf
   return AtoC;
 }
 
-void RosTFManager::getRPYfromMsg(const geometry_msgs::Transform &tfMsg, double &roll, double &pitch, double &yaw)
+void TFManagerRos::getRPYfromMsg(const geometry_msgs::Transform &tfMsg, double &roll, double &pitch, double &yaw)
 {
   tf::Quaternion q;
   tf::quaternionMsgToTF(tfMsg.rotation, q);

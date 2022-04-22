@@ -5,6 +5,7 @@
 #include <gridmap_navigation/map_converter_ros.h>
 #include <gridmap_navigation/dijkstra_search_ros.h>
 #include <gridmap_navigation/elastic_bands_ros.h>
+#include <laser_geometry/laser_geometry.h>
 
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>
@@ -15,7 +16,6 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Path.h>
 #include <sensor_msgs/LaserScan.h>
-#include <laser_geometry/laser_geometry.h>
 
 // pcl
 #include <pcl/point_cloud.h>
@@ -33,10 +33,8 @@ class GlobalPlannerRos
     const float OCCUPIED = 100;
     const float FREE = 0;
 
-private:
 public:
     GlobalPlannerRos();
-
     virtual ~GlobalPlannerRos() { nh.shutdown(); }
 
     void loadParamServer();
@@ -87,11 +85,11 @@ private:
 
 private:
     // ROS transform
-    RosTFManager tf_;
+    TFManagerRos tf_;
 
     // type converter
     MapConverterRos map_converter_;
-    laser_geometry::LaserProjection laser2pc_;
+    laser_geometry::LaserProjection scan2cloud_;
     DijkstraPathRosConverter path_converter_;
     ElasticBandsRosConverter eband_converter_;
 

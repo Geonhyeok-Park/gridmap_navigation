@@ -15,7 +15,12 @@ public:
     MapConverterRos(ros::NodeHandle &_nh);
     ~MapConverterRos() = default;
 
+    // get map by topic
+    void msgCallback(const nav_msgs::OccupancyGridConstPtr &msg);
+    void setSubTopic(const std::string &topic);
+    // get map by service
     bool queryOccupancyMap();
+
     bool convertOccupancyToGridmapLayer(grid_map::GridMap &gridmap, const std::string &layer);
     void gridInflation(grid_map::GridMap &gridmap, const std::string &layer_in, const std::string &layer_out,
                        int inflate_state, int inflation_size);
@@ -25,14 +30,25 @@ private:
     nav_msgs::GetMap query_map_;
     nav_msgs::OccupancyGrid occupancymap_;
 
-private:
+    ros::Subscriber sub_occupancymap_;
+    std::string topic_map_sub_;
 };
 
-#endif // GRIDMAP_NAVIGATION_MAP_CONVERTER_H
 
 MapConverterRos::MapConverterRos(ros::NodeHandle &nh)
 {
     map_client_ = nh.serviceClient<nav_msgs::GetMap>("/static_map");
+    sub_occupancymap_ = nh.subscribe(topic_map_sub_, 1, &MapConverterRos::msgCallback, this);
+}
+
+void MapConverterRos::msgCallback(const nav_msgs::OccupancyGridConstPtr &msg)
+{
+    occupancymap_ = *msg;
+}
+
+void MapConverterRos::setSubTopic(const std::string &topic)
+{
+    topic_map_sub_ = topic;
 }
 
 bool MapConverterRos::queryOccupancyMap()
@@ -88,3 +104,4 @@ void MapConverterRos::gridInflation(grid_map::GridMap &gridmap, const std::strin
         }
     }
 }
+#endif // GRIDMAP_NAVIGATION_MAP_CONVERTER_H

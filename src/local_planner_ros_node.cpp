@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include "local_planner_ros.h"
+#include "local_planner/local_planner_ros.h"
 
 using namespace grid_map;
 

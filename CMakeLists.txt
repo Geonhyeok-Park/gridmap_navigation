@@ -87,13 +87,13 @@ include_directories(
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_global
-  src/global_planner_ros.cpp 
-  src/dijkstra_search.cpp 
-  src/elastic_bands.cpp
+  src/global_planner/global_planner_ros.cpp 
+  src/global_planner/dijkstra_search.cpp 
+  src/global_planner/elastic_bands.cpp
 )
 add_library(${PROJECT_NAME}_local
-  src/local_planner_ros.cpp
-  src/dynamic_window_approach.cpp
+  src/local_planner/local_planner_ros.cpp
+  src/local_planner/dynamic_window_approach.cpp
 )
 
 ## Add cmake target dependencies of the library
@@ -105,7 +105,7 @@ add_library(${PROJECT_NAME}_local
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
  add_executable(gridmap_global_planner 
- src/global_planner_ros_node.cpp 
+ src//global_planner_ros_node.cpp 
  )
 
  add_executable(gridmap_local_planner

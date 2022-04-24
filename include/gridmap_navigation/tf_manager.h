@@ -125,6 +125,7 @@ bool TFManagerRos::getStaticTF(const std::string &sensorFrame)
   if (!lookupTransform("base_link", sensorFrame, SensorToBase))
     return false;
 
+  ROS_INFO_STREAM("Got static transform between base_link and " << sensorFrame);
   return true;
 }
 

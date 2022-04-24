@@ -41,6 +41,7 @@ public:
 
     void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
     void laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
+    void localmapCallback(const grid_map_msgs::GridMapConstPtr &msg);
 
     void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
     void updateSensorMap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, double cost);
@@ -58,19 +59,23 @@ private:
     ros::Publisher pub_eband_path;
     ros::Publisher pub_gridmap;
     ros::Publisher pub_laser;
-    ros::Publisher pub_localmap;
+    ros::Publisher pub_submap;
     ros::Publisher pub_bubble;
 
     ros::Subscriber sub_laser;
     ros::Subscriber sub_goal;
+    ros::Subscriber sub_localmap;
+
+    std::string topic_laser_sub;
+    std::string topic_localmap_sub;
 
     std::string topic_path_pub;
     std::string topic_eband_path_pub;
     std::string topic_gridmap_pub;
-    std::string topic_laser_pub;
-    std::string topic_localmap_pub;
-    std::string topic_laser_sub;
+    std::string topic_submap_pub;
     std::string topic_bubble_pub;
+
+    std::string sensor_frame_;
 
     ros::ServiceClient map_client;
     nav_msgs::GetMap get_map;
@@ -80,6 +85,7 @@ private:
 
 private:
     grid_map::GridMap map_;
+    grid_map::GridMap localmap_;
     grid_map::Position position_goal_;
     grid_map::Position position_robot_;
 
@@ -95,6 +101,7 @@ private:
 
     // source control flags
     bool goal_received_;
+    bool use_global_map_;
 
     // parameters
     int inflation_size_;

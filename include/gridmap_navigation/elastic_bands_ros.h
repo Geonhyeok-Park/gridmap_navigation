@@ -68,7 +68,7 @@ public:
             bubble.scale.y = eband.at(i).getRadius() * 2.0;
             bubble.scale.z = 0.05;
 
-            bubble.lifetime = ros::Duration(0.1);
+            bubble.lifetime = ros::Duration(0.5);
 
             bubble_msg.markers.at(i) = bubble;
         }

@@ -1,3 +1,0 @@
-global_planner:
-  input_cloud_topic: "/velodyne_tilted/velodyne_points"
-  

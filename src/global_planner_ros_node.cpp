@@ -8,12 +8,12 @@ using namespace grid_map;
 GlobalPlannerRos::GlobalPlannerRos()
     : nh("global_planner"),
       map_converter_(nh),
-      map_({"obstacle_static_raw", "obstacle_static", "intrinsic_cost", "obstacle_laser_raw", "obstacle_laser", "obstacle_all"}),
+      map_({"obstacle_static_raw", "obstacle_static", "intrinsic_cost", "obstacle_laser_raw", "obstacle_laser", "obstacle_all", "label"}),
       goal_received_(false)
 {
     loadParamServer();
 
-    while (!tf_.getStaticTF("tim581_front"))
+    while (!tf_.getStaticTF(sensor_frame_))
         ros::Duration(1.0).sleep();
 
     while (!map_converter_.queryOccupancyMap())
@@ -34,13 +34,14 @@ GlobalPlannerRos::GlobalPlannerRos()
     }
 
     sub_goal = nh.subscribe("/move_base_simple/goal", 10, &GlobalPlannerRos::goalCallback, this);
+    sub_localmap = nh.subscribe(topic_localmap_sub, 1, &GlobalPlannerRos::localmapCallback, this);
+
     sub_laser = nh.subscribe(topic_laser_sub, 10, &GlobalPlannerRos::laserCallback, this);
     pub_gridmap = nh.advertise<grid_map_msgs::GridMap>(topic_gridmap_pub, 1);
     pub_path = nh.advertise<nav_msgs::Path>(topic_path_pub, 10);
     pub_eband_path = nh.advertise<nav_msgs::Path>(topic_eband_path_pub, 10);
-    pub_laser = nh.advertise<sensor_msgs::PointCloud2>(topic_laser_pub, 1);
-    pub_localmap = nh.advertise<grid_map_msgs::GridMap>(topic_localmap_pub, 1);
-
+    pub_laser = nh.advertise<sensor_msgs::PointCloud2>("/laser_in_cloud", 1);
+    pub_submap = nh.advertise<grid_map_msgs::GridMap>(topic_submap_pub, 1);
     pub_bubble = nh.advertise<visualization_msgs::MarkerArray>(topic_bubble_pub, 10);
 }
 
@@ -78,16 +79,16 @@ void GlobalPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg
     sensor_msgs::PointCloud2 laser_cloud;
     scan2cloud_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
 
-    // transform cloud && visualize
+    // transform cloud
     const auto sensor_to_map = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);
     pcl_ros::transformPointCloud("map", sensor_to_map, laser_cloud, laser_cloud);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_m(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::fromROSMsg(laser_cloud, *cloud_m);
     pub_laser.publish(laser_cloud);
 
     // update Sensor map && visualize
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_m(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::fromROSMsg(laser_cloud, *cloud_m);
     updateSensorMap(cloud_m, max_intrinsic_cost_);
-    publishSubmap(map_, pub_localmap, Length(20, 20));
+    publishSubmap(map_, pub_submap, Length(20, 20));
 
     map_["obstacle_all"] = map_["intrinsic_cost"] + map_["obstacle_laser_raw"];
 
@@ -111,18 +112,79 @@ void GlobalPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg
     pub_bubble.publish(bubble_msg_);
 }
 
+void GlobalPlannerRos::localmapCallback(const grid_map_msgs::GridMapConstPtr &msg)
+{
+    if (!goal_received_)
+        return;
+
+    updateRobotPosition(msg->info.header.stamp);
+
+    GridMapRosConverter::fromMessage(*msg, localmap_);
+
+    if (!use_global_map_)
+    {
+        localmap_["label"] *= OCCUPIED;
+        localmap_.add("intrinsic_cost");
+        DijkstraSearch grid_search(localmap_, "label", position_robot_, position_goal_);
+        if (!grid_search.updateCostmap("intrinsic_cost"))
+            return;
+        max_intrinsic_cost_ = grid_search.getMaxCost();
+
+        DijkstraSearch planner(localmap_, "intrinsic_cost", position_robot_, position_goal_);
+        if (!planner.findPath())
+            return;
+
+        nav_msgs::Path msg_path_raw;
+        path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
+        pub_path.publish(msg_path_raw);
+        ElasticBands eband(localmap_, "label", planner.getPath());
+        // eband.update();
+        eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
+        pub_eband_path.publish(path_msg_);
+        pub_bubble.publish(bubble_msg_);
+    }
+    else
+    {
+        GridMapRosConverter::fromMessage(*msg, localmap_);
+        map_["label"].setZero();
+        map_.addDataFrom(localmap_, false, true, false, {"label"});
+        map_["obstacle_all"] = map_["intrinsic_cost"] + map_["label"] * max_intrinsic_cost_;
+
+        updateRobotPosition(msg->info.header.stamp);
+        DijkstraSearch planner(map_, "obstacle_all", position_robot_, position_goal_);
+        if (!planner.findPath())
+            return;
+
+        // publish global path
+        nav_msgs::Path msg_path_raw;
+        path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
+        pub_path.publish(msg_path_raw);
+
+        map_["obstacle_all"] = map_["obstacle_static_raw"] + map_["label"];
+        // modify global path locally && visualize
+        ElasticBands eband(map_, "obstacle_all", planner.getPath());
+        // eband.update();
+        eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
+        pub_eband_path.publish(path_msg_);
+        pub_bubble.publish(bubble_msg_);
+    }
+}
+
 void GlobalPlannerRos::loadParamServer()
 {
-    nh.param<std::string>("input_cloud_topic", topic_laser_sub, "/laserScan");
-    nh.param<std::string>("input_cloud_topic", topic_gridmap_pub, "/gridmap");
-    nh.param<std::string>("path_raw", topic_path_pub, "/path_raw");
-    nh.param<std::string>("eband_path", topic_eband_path_pub, "/path_banded");
-    nh.param<std::string>("bubble", topic_bubble_pub, "/elastic_bands");
+    nh.param<std::string>("sensorFrameId", sensor_frame_, "tim581_front");
 
-    nh.param<int>("test", inflation_size_, 4);
-    nh.param<std::string>("test2", topic_laser_sub, "/tim581_front/scan");
-    nh.param<std::string>("test3", topic_laser_pub, "/scan");
-    nh.param<std::string>("test4", topic_localmap_pub, "/localmap");
+    nh.param<std::string>("laserScanTopic", topic_laser_sub, "/tim581_front/scan");
+    nh.param<std::string>("localmapTopic", topic_localmap_sub, "/traversability/map");
+
+    nh.param<std::string>("globalMapTopic", topic_gridmap_pub, "/gridmap");
+    nh.param<std::string>("globalSubmapTopic", topic_submap_pub, "/gridmap_sub");
+    nh.param<std::string>("dijkstraPathTopic", topic_path_pub, "/path_raw");
+    nh.param<std::string>("ebandPathTopic", topic_eband_path_pub, "/path_banded");
+    nh.param<std::string>("ebandBubbleTopic", topic_bubble_pub, "/elastic_bands");
+
+    nh.param<int>("inflationGridSize", inflation_size_, 4);
+    nh.param<bool>("useGlobalmap", use_global_map_, false);
 }
 
 int main(int argc, char **argv)

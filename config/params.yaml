@@ -1,0 +1,21 @@
+global_planner:
+  sensorFrameId: "velodyne_tilted"
+
+  # Subscribe
+  # occupancy map: given by service
+  laserScanTopic: "/tim581_front/sca"
+  localmapTopic: "/traversability/map"
+
+  # Publish
+  globalMapTopic: "/gridmap"
+  globaSubmapTopic: "/gridmap_sub"
+  dijkstraPathTopic: "/path_raw"
+  ebandPathTopic: "/path_banded"
+  ebandBubbleTopic: "/elastic_bands"
+
+  # Params
+  inflationGridSize: 3
+  useGlobalmap: false
+
+local_planner:
+  test: "done"

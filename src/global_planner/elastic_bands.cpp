@@ -15,14 +15,17 @@ ElasticBands::ElasticBands(GridMap &map,
                            const std::string &layer,
                            const std::vector<Position> &path)
 {
-    if (path.empty())
-        throw std::length_error("pose Length is zero. Empty path");
+    // if (path.empty())
+    //     throw std::length_error("pose Length is zero. Empty path");
 
     map_ptr_ = &map;
     layer_ = layer;
 
     if (!createElasticBand(path))
-        throw std::runtime_error("creating elastic bands failed");
+    {
+        
+    }
+        // throw std::runtime_error("creating elastic bands failed");
 }
 
 ElasticBands::~ElasticBands()
@@ -33,6 +36,9 @@ ElasticBands::~ElasticBands()
 
 bool ElasticBands::createElasticBand(const std::vector<Position> &path)
 {
+    if (path.empty())
+        return false;
+        
     std::vector<BubbleXYIR> eband_raw;
     for (int i = 0; i < path.size(); ++i)
     {

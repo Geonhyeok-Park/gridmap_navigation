@@ -1,3 +1,5 @@
 <launch>
-    <node pkg="gridmap-navigation" type="gridmap_nav_planner" name="planner" respawn="false"/>
+    <rosparam command="load" file="$(find gridmap_navigation)/config/params.yaml" />
+    <node pkg="gridmap_navigation" type="gridmap_global_planner" name="global_planner" respawn="false" output="screen">
+    </node>
 </launch>

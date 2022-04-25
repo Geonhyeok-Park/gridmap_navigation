@@ -61,6 +61,8 @@ private:
     ros::Publisher pub_laser;
     ros::Publisher pub_submap;
     ros::Publisher pub_bubble;
+    ros::Publisher pub_local_goal;
+    ros::Publisher pub_local_map;
 
     ros::Subscriber sub_laser;
     ros::Subscriber sub_goal;
@@ -74,6 +76,7 @@ private:
     std::string topic_gridmap_pub;
     std::string topic_submap_pub;
     std::string topic_bubble_pub;
+    std::string topic_local_goal_pub;
 
     std::string sensor_frame_;
 

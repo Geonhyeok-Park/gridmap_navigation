@@ -43,6 +43,8 @@ GlobalPlannerRos::GlobalPlannerRos()
     pub_laser = nh.advertise<sensor_msgs::PointCloud2>("/laser_in_cloud", 1);
     pub_submap = nh.advertise<grid_map_msgs::GridMap>(topic_submap_pub, 1);
     pub_bubble = nh.advertise<visualization_msgs::MarkerArray>(topic_bubble_pub, 10);
+    pub_local_goal = nh.advertise<geometry_msgs::PoseStamped>(topic_local_goal_pub, 10);
+    pub_local_map = nh.advertise<nav_msgs::OccupancyGrid>("/local_map", 1);
 }
 
 void GlobalPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
@@ -142,6 +144,19 @@ void GlobalPlannerRos::localmapCallback(const grid_map_msgs::GridMapConstPtr &ms
         eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
         pub_eband_path.publish(path_msg_);
         pub_bubble.publish(bubble_msg_);
+
+        // local goal pub
+        geometry_msgs::PoseStamped msg_local_goal;
+        msg_local_goal.header.frame_id = "map";
+        msg_local_goal.header.stamp = msg->info.header.stamp;
+        msg_local_goal.pose = bubble_msg_.markers.at(2).pose;
+        pub_local_goal.publish(msg_local_goal);
+
+        // local map pub
+        nav_msgs::OccupancyGrid occupancy_map;
+        GridMapRosConverter::toOccupancyGrid(localmap_, "label", 0, OCCUPIED, occupancy_map);
+        pub_local_map.publish(occupancy_map);
+
     }
     else
     {
@@ -182,6 +197,7 @@ void GlobalPlannerRos::loadParamServer()
     nh.param<std::string>("dijkstraPathTopic", topic_path_pub, "/path_raw");
     nh.param<std::string>("ebandPathTopic", topic_eband_path_pub, "/path_banded");
     nh.param<std::string>("ebandBubbleTopic", topic_bubble_pub, "/elastic_bands");
+    nh.param<std::string>("localGoalTopic", topic_local_goal_pub, "/local_goal");
 
     nh.param<int>("inflationGridSize", inflation_size_, 4);
     nh.param<bool>("useGlobalmap", use_global_map_, false);

@@ -4,17 +4,17 @@ global_planner:
   # Subscribe
   # occupancy map: given by service
   laserScanTopic: "/tim581_front/sca"
-  localmapTopic: "/traversability/map"
+  localmapTopic: "/traversability/map2"
 
   # Publish
   globalMapTopic: "/gridmap"
   globaSubmapTopic: "/gridmap_sub"
-  dijkstraPathTopic: "/path_raw"
+  dijkstraPathTopic: "/path_raw2"
   ebandPathTopic: "/path_banded"
-  ebandBubbleTopic: "/elastic_bands"
+  ebandBubbleTopic: "/elastic_band"
 
   # Params
-  inflationGridSize: 3
+  inflationGridSize: 5
   useGlobalmap: false
 
 local_planner:

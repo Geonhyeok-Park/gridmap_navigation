@@ -42,7 +42,9 @@ GlobalPlannerRos::GlobalPlannerRos()
     pub_eband_path = nh.advertise<nav_msgs::Path>(topic_eband_path_pub, 10);
     pub_laser = nh.advertise<sensor_msgs::PointCloud2>("/laser_in_cloud", 1);
     pub_submap = nh.advertise<grid_map_msgs::GridMap>(topic_submap_pub, 1);
-    pub_bubble = nh.advertise<visualization_msgs::MarkerArray>(topic_bubble_pub, 10);
+    // pub_bubble = nh.advertise<visualization_msgs::MarkerArray>(topic_bubble_pub, 10);
+    pub_bubble = nh.advertise<visualization_msgs::Marker>(topic_bubble_pub, 10);
+
     pub_local_goal = nh.advertise<geometry_msgs::PoseStamped>(topic_local_goal_pub, 10);
     pub_local_map = nh.advertise<nav_msgs::OccupancyGrid>("/local_map", 1);
 }
@@ -141,22 +143,56 @@ void GlobalPlannerRos::localmapCallback(const grid_map_msgs::GridMapConstPtr &ms
         pub_path.publish(msg_path_raw);
         ElasticBands eband(localmap_, "label", planner.getPath());
         // eband.update();
-        eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
-        pub_eband_path.publish(path_msg_);
-        pub_bubble.publish(bubble_msg_);
+        // eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
+        // pub_eband_path.publish(path_msg_);
+        // pub_bubble.publish(bubble_msg_);
 
-        // local goal pub
-        geometry_msgs::PoseStamped msg_local_goal;
-        msg_local_goal.header.frame_id = "map";
-        msg_local_goal.header.stamp = msg->info.header.stamp;
-        msg_local_goal.pose = bubble_msg_.markers.at(2).pose;
-        pub_local_goal.publish(msg_local_goal);
+        // ///////////////////////////////////////////////////////////////////////
+        visualization_msgs::Marker bubble;
+        bubble.type = visualization_msgs::Marker::SPHERE;
+        bubble.action = visualization_msgs::Marker::ADD;
+        bubble.header.frame_id = "map";
+        bubble.header.stamp = ros::Time(0);
+        bubble.ns = "eband";
+        bubble.id = 1;
 
-        // local map pub
-        nav_msgs::OccupancyGrid occupancy_map;
-        GridMapRosConverter::toOccupancyGrid(localmap_, "label", 0, OCCUPIED, occupancy_map);
-        pub_local_map.publish(occupancy_map);
+        // position
+        bubble.pose.position.x = eband.getBubbles().at(15).getPosition().x();
+        bubble.pose.position.y = eband.getBubbles().at(15).getPosition().y();
+        bubble.pose.position.z = 0;
+        bubble.pose.orientation.x = 0;
+        bubble.pose.orientation.y = 0;
+        bubble.pose.orientation.z = 0;
+        bubble.pose.orientation.w = 1;
 
+        // color
+        bubble.color.a = 0.3;
+        bubble.color.r = 0.0;
+        bubble.color.g = 0.5;
+        bubble.color.b = 0.0;
+
+        // size
+        bubble.scale.x = eband.getBubbles().at(15).getRadius() * 2.0;
+        bubble.scale.y = eband.getBubbles().at(15).getRadius() * 2.0;
+        bubble.scale.z = 0.05;
+
+        bubble.lifetime = ros::Duration();
+
+        pub_bubble.publish(bubble);
+
+        ////////////////////////////////////////////////////////////////////////////
+        // // local goal pub
+        // geometry_msgs::PoseStamped msg_local_goal;
+        // msg_local_goal.header.frame_id = "map";
+        // msg_local_goal.header.stamp = msg->info.header.stamp;
+        // msg_local_goal.pose = bubble_msg_.markers.at(2).pose;
+        // pub_local_goal.publish(msg_local_goal);
+
+        // // local map pub
+        // nav_msgs::OccupancyGrid occupancy_map;
+        // GridMapRosConverter::toOccupancyGrid(localmap_, "label", 0, OCCUPIED, occupancy_map);
+        // pub_local_map.publish(occupancy_map);
+        // publishSubmap(map_, pub_submap, Length(4, 4));
     }
     else
     {

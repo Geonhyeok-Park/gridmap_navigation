@@ -14,49 +14,60 @@
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <visualization_msgs/MarkerArray.h>
 
 // pcl
 #include <pcl/point_cloud.h>
 #include <pcl_ros/transforms.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-class LocalPlannerRos
+class LocalPlannerNode
 {
+    // needs initializer
+private:
+    ros::NodeHandle &nh;
+    MapConverterRos map_converter_;
+
+    // ros interface
+private:
+    ros::Publisher pub_cmdvel;
+    std::string pubtopic_cmdvel;
+
+    ros::Subscriber sub_goal;
+    std::string subtopic_goal;
+
+    ros::Subscriber sub_cmdvel;
+    std::string subtopic_cmdvel;
+
+    ros::Subscriber sub_localmap;
+    std::string subtopic_localmap;
+
+    ros::Subscriber sub_eband;
+    std::string subtopic_eband;
+
+private:
     Robot robot_;
     grid_map::GridMap map_;
     grid_map::Position goal_;
 
 public:
-    LocalPlannerRos();
-    ~LocalPlannerRos() { nh.shutdown(); }
+    LocalPlannerNode(ros::NodeHandle &);
+    ~LocalPlannerNode() { nh.shutdown(); }
 
-    void loadParamServer();
+    void registerNodeParams();
 
-    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg);
-    void velocityCallback(const geometry_msgs::TwistConstPtr &msg);
+    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
+    void velocityCallback(const geometry_msgs::TwistConstPtr &);
+    void ebandCallback(const visualization_msgs::MarkerArray::ConstPtr &);
+    void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
 
-    void velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist &msg);
+    void velocityToRosMsg(const Velocity &, geometry_msgs::Twist &);
     void setRobotParams();
-    void setRobotState(const geometry_msgs::Twist &msg);
-
-private:
-    ros::NodeHandle nh;
-
-    ros::Publisher pub_vel;
-
-    ros::Subscriber sub_goal;
-    ros::Subscriber sub_vel;
-    ros::Subscriber sub_localmap;
-
-    std::string topic_vel_sub;
-    std::string topic_vel_pub;
-    std::string topic_localmap_sub;
-    std::string topic_goal_sub;
+    void setRobotState(const geometry_msgs::Twist &);
 
 private:
     TFManagerRos tf_;
     laser_geometry::LaserProjection scan2cloud_;
-    MapConverterRos map_converter_;
 
 private:
     // control flags
@@ -75,8 +86,7 @@ private:
     double time_interval_;
 };
 
-
-void LocalPlannerRos::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist &msg)
+void LocalPlannerNode::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist &msg)
 {
     double linear_vel = vel.x();
     double angular_vel = vel.y();
@@ -89,16 +99,16 @@ void LocalPlannerRos::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist
     msg.angular.z = angular_vel;
 }
 
-void LocalPlannerRos::setRobotParams()
+void LocalPlannerNode::setRobotParams()
 {
     robot_.setGeometry("base_link", robot_radius_, robot_tread_length_);
     robot_.setConstraints(robot_max_acc_, robot_max_yawrate_);
 }
 
-void LocalPlannerRos::setRobotState(const geometry_msgs::Twist &msg)
+void LocalPlannerNode::setRobotState(const geometry_msgs::Twist &msg)
 {
     tf_.getTF(ros::Time::now());
-    
+
     Pose current_pose;
     current_pose.setPosition(grid_map::Position(tf_.BaseToMap.translation.x, tf_.BaseToMap.translation.y));
     current_pose.setYaw(tf::getYaw(tf_.BaseToMap.rotation));

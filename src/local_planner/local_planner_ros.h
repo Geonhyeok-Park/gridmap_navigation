@@ -8,7 +8,6 @@
 #include <gridmap_navigation/tf_manager.h>
 #include <laser_geometry/laser_geometry.h>
 #include <gridmap_navigation/map_converter_ros.h>
-#include "dynamic_window_approach.h"
 #include "dwa.h"
 
 // ROS msgs
@@ -24,18 +23,19 @@
 
 class LocalPlannerNode
 {
+    using Position = Eigen::Vector2d;
+    using Velocity = Eigen::Vector2d;
+    using Pose = Eigen::Vector3d;
+
     // needs initializer
 private:
     ros::NodeHandle &nh;
-    MapConverterRos map_converter_;
+    // MapConverterRos map_converter_;
 
     // ros interface
 private:
     ros::Publisher pub_cmdvel;
     std::string pubtopic_cmdvel;
-
-    ros::Subscriber sub_goal;
-    std::string subtopic_goal;
 
     ros::Subscriber sub_cmdvel;
     std::string subtopic_cmdvel;
@@ -43,49 +43,49 @@ private:
     ros::Subscriber sub_localmap;
     std::string subtopic_localmap;
 
-    ros::Subscriber sub_eband;
+    ros::Subscriber sub_localgoal;
     std::string subtopic_eband;
 
+    // parameters
 private:
+    ROBOT robot_;
+    double param_tread;
+    double param_max_linear_vel;
+    double param_max_angular_vel;
+    double param_max_wheel_accel;
+    double param_forward_simtime;
+
     DWA window_;
-    Robot robot_;
-    grid_map::GridMap map_;
-    grid_map::Position goal_;
+    double param_linear_vel_res;
+    double param_angular_vel_res;
+    double param_controltime;
 
-public:
-    LocalPlannerNode(ros::NodeHandle &);
-    ~LocalPlannerNode() { nh.shutdown(); }
+    double param_goal_distance;
 
-    void registerNodeParams();
-
-    void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
-    void velocityCallback(const geometry_msgs::TwistConstPtr &);
-    void ebandCallback(const visualization_msgs::MarkerArray::ConstPtr &);
-    void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
-
-    void velocityToRosMsg(const Velocity &, geometry_msgs::Twist &);
-    void setRobotParams();
-    void setRobotState(const geometry_msgs::Twist &);
+    // grid_map::GridMap map_;
+    // grid_map::Position goal_;
 
 private:
     TFManagerRos tf_;
     laser_geometry::LaserProjection scan2cloud_;
 
 private:
-    // control flags
-    bool recieved_goal_;
-    bool recieved_vel_;
-    bool recieved_obstacle_;
+    void velocityToRosMsg(const Velocity &, geometry_msgs::Twist &);
+    double getDistance(Position a, Position b) { return (a - b).norm(); }
 
-    // robot parameters
-    double robot_radius_;
-    double robot_tread_length_;
-    double robot_max_acc_;
-    double robot_max_yawrate_;
+public:
+    LocalPlannerNode(ros::NodeHandle &);
+    ~LocalPlannerNode() { nh.shutdown(); }
+    void registerNodeParams();
 
-    // time
-    double sim_time_;
-    double time_interval_;
+    bool recieved_cmdvel_;
+    void velocityCallback(const geometry_msgs::TwistConstPtr &);
+
+    bool recieved_localgoal_;
+    void localgoalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
+
+    bool recieved_localmap_;
+    void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
 };
 
 void LocalPlannerNode::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist &msg)
@@ -101,23 +101,17 @@ void LocalPlannerNode::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twis
     msg.angular.z = angular_vel;
 }
 
-void LocalPlannerNode::setRobotParams()
-{
-    robot_.setGeometry("base_link", robot_radius_, robot_tread_length_);
-    robot_.setConstraints(robot_max_acc_, robot_max_yawrate_);
-}
+// void LocalPlannerNode::setRobotState(const geometry_msgs::Twist &msg)
+// {
+//     tf_.getTF(ros::Time::now());
 
-void LocalPlannerNode::setRobotState(const geometry_msgs::Twist &msg)
-{
-    tf_.getTF(ros::Time::now());
+//     Pose current_pose;
+//     current_pose.setPosition(grid_map::Position(tf_.BaseToMap.translation.x, tf_.BaseToMap.translation.y));
+//     current_pose.setYaw(tf::getYaw(tf_.BaseToMap.rotation));
+//     robot_.setPose(current_pose);
 
-    Pose current_pose;
-    current_pose.setPosition(grid_map::Position(tf_.BaseToMap.translation.x, tf_.BaseToMap.translation.y));
-    current_pose.setYaw(tf::getYaw(tf_.BaseToMap.rotation));
-    robot_.setPose(current_pose);
-
-    Velocity current_vel(msg.linear.x, msg.angular.z);
-    robot_.setVelocity(current_vel);
-}
+//     Velocity current_vel(msg.linear.x, msg.angular.z);
+//     robot_.setVelocity(current_vel);
+// }
 
 #endif // GRIDMAP_NAVIGATION_LOCAL_PLANNER_ROS_H

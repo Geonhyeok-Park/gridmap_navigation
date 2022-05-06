@@ -6,48 +6,70 @@
 #define GRIDMAP_NAVIGATION_DWA_H
 
 #include <vector>
-#include <grid_map_core/grid_map_core.hpp>
+#include <eigen/eigen.hpp>
+#include <angles.h>
 
 class ROBOT
 {
     using Pose = Eigen::Vector3d;
     using Velocity = Eigen::Vector2d;
-    using Acceleration = Eigen::Vector2d;
 
 private:
+    double robot_radius_;
+    double tread_;
+
+    // for motion model
     Pose pose_;
     Velocity velocity_;
-    Velocity max_velocity_;
-    Acceleration max_acceleration_;
-    double tread_;
     double forward_simtime_;
 
-    Pose transformToMap(Pose &local, const Pose &local_origin);
+    // user defined
+    Velocity max_velocity_;
+
+    // platform defined
+    double max_wheel_acceleration_;
+
+    Pose transformToMap(Pose &local, Pose &baseToMap);
+    Pose motion(Pose, double);
+
 public:
     ROBOT();
-    ROBOT(double tread, Eigen::Vector2d &max_vel, Eigen::Vector2d &max_accel);
+    ROBOT(double tread, const Velocity &max_vel, double max_accel);
     ~ROBOT() = default;
 
-    void setMaxVel(double linear, double angular);
-    void setMaxAccel(double linear, double angular);
-    const Velocity &getMaxVel() const;
-    const Acceleration &getMaxAccel() const;
+    // robot geometry
+    void setTread(double);
+    double getTread() const;
 
+    // 2D Pose
     void setPose(double position_x, double position_y, double yaw);
+    const Pose &getPose() const;
+
+    void setVel(double, double);
+    const Velocity &getVel() const;
+
+    // max cmd velocity
+    void setMaxCmdvel(double linear, double angular);
+    const Velocity &getMaxCmdvel() const;
+
+    // max wheel acceleration
+    void setMaxAccel(double);
+    double getMaxAccel() const;
+
+    // forward simulation
     void setSimulationTime(double);
-    Pose motion(double);
-    Pose forwardSimulation(double);
+    std::vector<Pose> forwardSimulation(double);
 
     void cmdvelToWheelvel(const Velocity &cmdvel, double &vl, double &vr);
     void wheelvelTocmdvel(const Velocity &wheelvel, double &v, double &w);
+    double angResToWheelRes(double);
+    double linResToWheelRes(double);
 };
 
 class DWA
 {
     using Pose = Eigen::Vector3d;
     using Velocity = Eigen::Vector2d;
-    using Acceleration = Eigen::Vector2d;
-
     struct Cost
     {
         double target_heading;
@@ -64,29 +86,58 @@ class DWA
     };
 
 private:
+    // robot param
+    ROBOT robot_;
     double max_acceleration_;
-    double acceleration_res_;
-    double control_cycletime_;
 
+    Pose goal_;
+
+    // TODO: need this?
+    double vl_lower_bound_;
+    double vl_upper_bound_;
+    double vr_lower_bound_;
+    double vr_upper_bound_;
+
+    // TODO: need other info to debug?
+    double min_v_;
+    double max_v_;
+    // window size
+    double vlvr_resolution_;
     int size_;
+
+    // dt
+    double control_time_;
+
+    // error debug
+    bool initialized_;
 
     std::vector<std::vector<VelCostPair>> window_;
 
+private:
+    void setMaxWheelAccel(double max_wheel_accel) { max_acceleration_ = max_wheel_accel; }
+    void setMaxVelocity(Velocity);
+    Velocity getMinMaxWheelVelocity() const { return Velocity(vl_lower_bound_, vl_upper_bound_); }
+    bool isValidWheelVelocity(double, double);
+
 public:
     DWA();
+    DWA(ROBOT, double, double, double);
     ~DWA() = default;
-    void resetCost();
-    void resetWindow();
+
+    void setRobot(const ROBOT &);
+    void setWindowResolution(Velocity);
+    void setControlTimeInSec(double);
+    void initialize();
+
+    void setVelocity(Velocity);
+    void setGoal(Pose);
+
+    void updateCost();
+
+    bool resetCost();
+    bool resetAll();
     void resetWindow(Velocity cmdvel);
-    
-    void setMaxWheelAccel(double);
-    void setWindowResolution(double);
-    
-    // temp
-    void setMaxVelocity(double, double);
-    void setControlCycleTime(double);
+
 };
-
-
 
 #endif // GRIDMAP_NAVIGATION_DWA_H

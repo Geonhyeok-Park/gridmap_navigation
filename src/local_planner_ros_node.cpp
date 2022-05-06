@@ -29,37 +29,37 @@ using namespace grid_map;
 //     pub_cmdvel = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
 // }
 
-void LocalPlannerNode::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
-{
-    ROS_INFO("goal recieved");
+// void LocalPlannerNode::localgoalCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
+// {
+//     ROS_INFO("goal recieved");
 
-    if (!recieved_vel_)
-    {
-        geometry_msgs::Twist msg_vel;
-        Velocity zeroVel(0, 0);
-        velocityToRosMsg(zeroVel, msg_vel);
-        pub_cmdvel.publish(msg_vel);
-    }
-    goal_ = Position(msg->pose.position.x, msg->pose.position.y);
-    recieved_goal_ = true;
-}
+//     if (!recieved_vel_)
+//     {
+//         geometry_msgs::Twist msg_vel;
+//         Velocity zeroVel(0, 0);
+//         velocityToRosMsg(zeroVel, msg_vel);
+//         pub_cmdvel.publish(msg_vel);
+//     }
+//     goal_ = Position(msg->pose.position.x, msg->pose.position.y);
+//     recieved_goal_ = true;
+// }
 
 // main thread
-void LocalPlannerNode::velocityCallback(const geometry_msgs::TwistConstPtr &msg)
-{
-    ROS_INFO("command velocity recieved");
+// void LocalPlannerNode::velocityCallback(const geometry_msgs::TwistConstPtr &msg)
+// {
+//     ROS_INFO("command velocity recieved");
 
-    if (!map_converter_.convertOccupancyToGridmapLayer(map_, "obstacle_local"))
-        return;
+//     if (!map_converter_.convertOccupancyToGridmapLayer(map_, "obstacle_local"))
+//         return;
 
-    if (!recieved_goal_)
-        return;
+//     if (!recieved_goal_)
+//         return;
 
-    setRobotState(*msg);
-    DWA dwa(robot_, goal_, map_, time_interval_);
-    dwa.planning(sim_time_);
-    recieved_vel_ = true;
-}
+//     setRobotState(*msg);
+//     DWA dwa(robot_, goal_, map_, time_interval_);
+//     dwa.planning(sim_time_);
+//     recieved_vel_ = true;
+// }
 
 
 

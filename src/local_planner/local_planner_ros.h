@@ -9,6 +9,7 @@
 #include <laser_geometry/laser_geometry.h>
 #include <gridmap_navigation/map_converter_ros.h>
 #include "dynamic_window_approach.h"
+#include "dwa.h"
 
 // ROS msgs
 #include <geometry_msgs/Twist.h>
@@ -46,6 +47,7 @@ private:
     std::string subtopic_eband;
 
 private:
+    DWA window_;
     Robot robot_;
     grid_map::GridMap map_;
     grid_map::Position goal_;

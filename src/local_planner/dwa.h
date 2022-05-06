@@ -22,7 +22,7 @@ private:
     double tread_;
     double forward_simtime_;
 
-
+    Pose transformToMap(Pose &local, const Pose &local_origin);
 public:
     ROBOT();
     ROBOT(double tread, Eigen::Vector2d &max_vel, Eigen::Vector2d &max_accel);
@@ -35,7 +35,8 @@ public:
 
     void setPose(double position_x, double position_y, double yaw);
     void setSimulationTime(double);
-    Pose simulMotion(double);
+    Pose motion(double);
+    Pose forwardSimulation(double);
 
     void cmdvelToWheelvel(const Velocity &cmdvel, double &vl, double &vr);
     void wheelvelTocmdvel(const Velocity &wheelvel, double &v, double &w);
@@ -83,8 +84,6 @@ public:
     
     // temp
     void setMaxVelocity(double, double);
-
-    void setSimulationTime(double);
     void setControlCycleTime(double);
 };
 

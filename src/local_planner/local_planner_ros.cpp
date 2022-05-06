@@ -10,6 +10,11 @@ LocalPlannerNode::LocalPlannerNode(ros::NodeHandle &_nh)
 {
     registerNodeParams();
 
+    window_.setControlCycleTime(0.2);
+    window_.setMaxVelocity(linvel_max_, angvel_max_);
+    window_.setMaxWheelAccel(0.5);
+    window_.setWindowResolution();
+
     sub_goal = nh.subscribe("/move_base_simple/goal", 10, &LocalPlannerNode::goalCallback, this);
     sub_cmdvel = nh.subscribe("/cmd_vel", 10, &LocalPlannerNode::velocityCallback, this);
     sub_eband = nh.subscribe(subtopic_eband, 10, &LocalPlannerNode::ebandCallback, this);

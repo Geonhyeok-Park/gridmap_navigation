@@ -4,6 +4,8 @@
 
 #include "local_planner_ros.h"
 
+using namespace grid_map;
+
 LocalPlannerNode::LocalPlannerNode(ros::NodeHandle &_nh)
     : nh(_nh),
       recieved_cmdvel_(false),
@@ -14,21 +16,22 @@ LocalPlannerNode::LocalPlannerNode(ros::NodeHandle &_nh)
     registerNodeParams();
 
     // robot setup
-    robot_.setTread(param_tread);
-    robot_.setSimulationTime(param_forward_simtime);
-    robot_.setMaxCmdvel(param_max_linear_vel, param_max_angular_vel);
-    robot_.setMaxAccel(param_max_wheel_accel);
+    ROBOT robot;
+    robot.setTread(param_tread);
+    robot.setMaxVel(Velocity(param_max_linear_vel, param_max_angular_vel));
+    robot.setMaxAccel(param_max_wheel_accel);
+    robot.setSimulationTime(param_forward_simtime, param_controltime);
 
     // robot initial state
-    robot_.setPose(0, 0, 0);
-    robot_.setVel(0, 0);
+    robot.setPose(0, 0, 0);
 
     // window setup
-    window_.setRobot(robot_);
+    window_.setRobot(robot);
     window_.setWindowResolution(Velocity(param_linear_vel_res, param_angular_vel_res));
-    window_.setControlTimeInSec(param_controltime);
-
     window_.initialize();
+
+    // robot alias
+    *pRobot_ = window_.getRobot();
 
     sub_cmdvel = nh.subscribe("/cmd_vel", 1, &LocalPlannerNode::velocityCallback, this);
     sub_localgoal = nh.subscribe(subtopic_eband, 1, &LocalPlannerNode::localgoalCallback, this);
@@ -39,26 +42,70 @@ LocalPlannerNode::LocalPlannerNode(ros::NodeHandle &_nh)
 
 void LocalPlannerNode::velocityCallback(const geometry_msgs::TwistConstPtr &msg)
 {
+    window_.updateVelocity(Velocity(msg->linear.x, msg->angular.z));
     recieved_cmdvel_ = true;
-    window_.setVelocity(Velocity(msg->linear.x, msg->angular.z));
 }
 
 void LocalPlannerNode::localmapCallback(const grid_map_msgs::GridMapConstPtr &msg)
 {
+    if (!recieved_cmdvel_)
+        return;
+
+    // update local map
+    GridMapRosConverter::fromMessage(*msg, localmap_);
     recieved_localmap_ = true;
+
+    // update robot pose
+    tf_.getTF(msg->info.header.stamp);
+    pRobot_->setPose(tf_.BaseToMap.translation.x, tf_.BaseToMap.translation.y, tf::getYaw(tf_.BaseToMap.rotation));
+
+    // forward sim: update trajectory
+    for (int i = 0; i < window_.getSize(); ++i)
+    {
+        for (int j = 0; j < window_.getSize(); ++j)
+        {
+            const auto &vl = window_.access(i, j).vl;
+            const auto &vr = window_.access(i, j).vr;
+            sim_trajectory_ = pRobot_->forwardSimulation(Velocity(vl, vr));
+            for (const auto &pose : sim_trajectory_)
+            {
+                checkCollision(localmap_, "label", pose, pRobot_->getRadius());
+            }
+        }
+    }
 }
 
 void LocalPlannerNode::localgoalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
 {
-    recieved_localgoal_ = true;
     bool can_control = (recieved_cmdvel_ && recieved_localmap_);
     if (!can_control)
         return;
 
-    window_.setGoal(Pose(msg->pose.position.x, msg->pose.position.y, tf::getYaw(msg->pose.orientation)));
+    pRobot_->setGoal(Pose(msg->pose.position.x, msg->pose.position.y, tf::getYaw(msg->pose.orientation)));
+    recieved_localgoal_ = true;
+
     window_.updateCost();
 
     // publish cmd vel
+}
+
+double LocalPlannerNode::checkCollision(const GridMap &map, const std::string &layer,
+                                        Pose pose, double search_radius)
+{
+    auto position = pose.head(2);
+    Index grid_index;
+    if(!map.getIndex(position, grid_index))
+        return search_radius;
+    
+    float occupied = 100;
+    // if ((map.at(layer, grid_index) - occupied) < DBL_EPSILON)
+    //     return 0;
+
+    SpiralIterator iter(map, pose.head(2), search_radius);
+    for(iter; !iter.isPastEnd(); ++iter)
+    {
+        // check occupied or not
+    }
 }
 
 int main(int argc, char **argv)

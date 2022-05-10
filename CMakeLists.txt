@@ -24,6 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(PCL REQUIRED COMPONENTS common)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -71,6 +72,7 @@ catkin_package(
   std_msgs 
   tf 
   tf2_ros
+  laser_geometry
 #  DEPENDS system_lib
 )
 
@@ -93,7 +95,7 @@ add_library(${PROJECT_NAME}_global
 )
 add_library(${PROJECT_NAME}_local
   src/local_planner/local_planner_ros.cpp
-  src/local_planner/dynamic_window_approach.cpp
+  src/local_planner/dwa.cpp
 )
 
 ## Add cmake target dependencies of the library

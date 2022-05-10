@@ -5,7 +5,7 @@
 #include <gridmap_navigation/map_converter_ros.h>
 #include <gridmap_navigation/dijkstra_search_ros.h>
 #include <gridmap_navigation/elastic_bands_ros.h>
-#include <laser_geometry/laser_geometry.h>
+// #include <laser_geometry/laser_geometry.h>
 
 // grid map ROS
 #include <grid_map_msgs/GridMap.h>
@@ -98,7 +98,7 @@ private:
 
     // type converter
     MapConverterRos map_converter_;
-    laser_geometry::LaserProjection scan2cloud_;
+    // laser_geometry::LaserProjection scan2cloud_;
     DijkstraPathRosConverter path_converter_;
     ElasticBandsRosConverter eband_converter_;
 

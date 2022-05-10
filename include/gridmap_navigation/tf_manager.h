@@ -110,12 +110,12 @@ bool TFManagerRos::getTF(const ros::Time &time)
 {
   if (!lookupTransform("map", "base_link", BaseToMap, time))
     return false;
-  if (!lookupTransform("base_link", "map", MapToBase, time))
-    return false;
-  if (!lookupTransform("odom", "base_link", BaseToOdom, time))
-    return false;
-  if (!lookupTransform("base_link", "odom", OdomToBase, time))
-    return false;
+  // if (!lookupTransform("base_link", "map", MapToBase, time))
+  //   return false;
+  // if (!lookupTransform("odom", "base_link", BaseToOdom, time))
+  //   return false;
+  // if (!lookupTransform("base_link", "odom", OdomToBase, time))
+  //   return false;
 
   return true;
 }

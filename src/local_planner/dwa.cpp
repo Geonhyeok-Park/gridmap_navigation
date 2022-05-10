@@ -17,33 +17,31 @@ using Acceleration = Eigen::Vector2d;
 
 ROBOT::ROBOT()
 {
+    // geometry
+    tread_ = 0.58;
+    radius_ = 0.4;
+
+    // state for motion model
     pose_.setZero();
-    velocity_.setZero();
+    forward_simtime_ = 1.0;
+    control_time_ = 0.1;
 
     max_velocity_ = Velocity(0.7, 0.7854);
     max_wheel_acceleration_ = 0.5;
-    tread_ = 0.58;
-
-    forward_simtime_ = 1.0;
 }
 
 ROBOT::ROBOT(double tread, const Velocity &max_velocity, double max_acceleration)
     : tread_(tread),
+      radius_(0.4),
       max_velocity_(max_velocity),
       max_wheel_acceleration_(max_acceleration)
 
 {
     pose_.setZero();
-    velocity_.setZero();
 
     forward_simtime_ = 1.0;
+    control_time_ = 0.1;
 }
-
-void ROBOT::setTread(double tread)
-{
-    tread_ = tread;
-}
-double ROBOT::getTread() const { return tread_; }
 
 void ROBOT::setPose(double position_x, double position_y, double yaw)
 {
@@ -53,19 +51,11 @@ void ROBOT::setPose(double position_x, double position_y, double yaw)
 }
 const Pose &ROBOT::getPose() const { return pose_; }
 
-void ROBOT::setVel(double linear, double angular)
+void ROBOT::setMaxVel(Velocity max_velocity)
 {
-    velocity_(0) = linear;
-    velocity_(1) = angular;
+    max_velocity_ = max_velocity;
 }
-const Velocity &ROBOT::getVel() const { return velocity_; }
-
-void ROBOT::setMaxCmdvel(double linear, double angular)
-{
-    max_velocity_(0) = linear;
-    max_velocity_(1) = angular;
-}
-const Velocity &ROBOT::getMaxCmdvel() const { return max_velocity_; }
+const Velocity &ROBOT::getMaxVel() const { return max_velocity_; }
 
 void ROBOT::setMaxAccel(double max_wheel_accel)
 {
@@ -73,15 +63,18 @@ void ROBOT::setMaxAccel(double max_wheel_accel)
 }
 double ROBOT::getMaxAccel() const { return max_wheel_acceleration_; }
 
-void ROBOT::setSimulationTime(double sim_time)
+void ROBOT::setSimulationTime(double sim_time, double delta)
 {
     forward_simtime_ = sim_time;
+    control_time_ = delta;
 }
 
-Pose ROBOT::motion(Pose init_pose, double dt)
+Pose ROBOT::motion(const Pose &init_pose, const Velocity &cmd_vel)
 {
-    const auto &v = velocity_(0);
-    const auto &w = velocity_(1);
+    const auto &v = cmd_vel(0);
+    const auto &w = cmd_vel(1);
+    const auto &dt = control_time_;
+
     double dx = v * dt * std::cos(w * dt);
     double dy = v * dt * std::sin(w * dt);
     double dtheta = w * dt;
@@ -92,21 +85,21 @@ Pose ROBOT::motion(Pose init_pose, double dt)
     return pose_after_motion;
 }
 
-std::vector<Pose> ROBOT::forwardSimulation(double dt)
+std::vector<Pose> ROBOT::forwardSimulation(const Velocity &cmd_vel)
 {
-    const auto &n_iteration = forward_simtime_ / dt;
+    const auto &n_iteration = forward_simtime_ / control_time_;
     std::vector<Pose> poselist;
     Pose moving = pose_;
     for (int i = 0; i < n_iteration; ++i)
     {
-        moving = motion(moving, dt);
+        moving = motion(moving, cmd_vel);
         poselist.push_back(moving);
     }
 
     return poselist;
 }
 
-Pose ROBOT::transformToMap(Pose &local, Pose &baseToMap)
+Pose ROBOT::transformToMap(Pose &local, const Pose &baseToMap)
 {
     double position_x = baseToMap.x() + local.x() * std::cos(baseToMap(2)) - local.y() * std::sin(baseToMap(2));
     double position_y = baseToMap.y() + local.x() * std::sin(baseToMap(2)) + local.y() * std::cos(baseToMap(2));
@@ -116,20 +109,20 @@ Pose ROBOT::transformToMap(Pose &local, Pose &baseToMap)
     return Pose(position_x, position_y, theta);
 }
 
-void ROBOT::cmdvelToWheelvel(const Velocity &cmdvel, double &vl, double &vr)
+void ROBOT::cmdvelToWheelvel(const Velocity &cmdvel, VlVrVelocity &wheelvel)
 {
     const auto &v = cmdvel(0);
     const auto &w = cmdvel(1);
-    vr = v + w * tread_ / 2.0;
-    vl = v - w * tread_ / 2.0;
+    wheelvel(0) = v - w * tread_ / 2.0;
+    wheelvel(1) = v + w * tread_ / 2.0;
 }
 
-void ROBOT::wheelvelTocmdvel(const Velocity &wheelvel, double &v, double &w)
+void ROBOT::wheelvelTocmdvel(const VlVrVelocity &wheelvel, Velocity &cmdvel)
 {
     const auto &vl = wheelvel(0);
     const auto &vr = wheelvel(1);
-    v = (vl + vr) / 2.0;
-    w = (vr - vl) / tread_;
+    cmdvel(0) = (vl + vr) / 2.0;
+    cmdvel(1) = (vr - vl) / tread_;
 }
 
 double ROBOT::angResToWheelRes(double angvel_res)
@@ -149,81 +142,51 @@ double ROBOT::linResToWheelRes(double linvel_res)
 //////////////////////////////////////
 
 DWA::DWA()
-    : max_acceleration_(0),
-      vl_lower_bound_(0),
-      vr_lower_bound_(0),
-      vl_upper_bound_(0),
-      vr_upper_bound_(0),
-      vlvr_resolution_(0),
-      control_time_(0),
+    : vlvr_resolution_(0),
       size_(0),
       initialized_(false)
 {
 }
 
-DWA::DWA(ROBOT robot, double linvel_res, double angvel_res, double cycle_time)
+DWA::DWA(ROBOT robot, double linvel_res, double angvel_res)
+    : vlvr_resolution_(0),
+      size_(0),
+      initialized_(false)
 {
     setRobot(robot);
     setWindowResolution(Velocity(linvel_res, angvel_res));
-    setControlTimeInSec(cycle_time);
 
     initialize();
 }
 
-void DWA::setRobot(const ROBOT &robot)
-{
-    robot_ = robot;
-    setMaxWheelAccel(robot_.getMaxAccel());
-    setMaxVelocity(robot_.getMaxCmdvel());
-}
-
-void DWA::setMaxVelocity(Velocity max_cmdvel)
-{
-    auto max_linear = max_cmdvel(0);
-    auto max_angular = max_cmdvel(1);
-    vl_lower_bound_ = -robot_.getTread() * max_angular / 2;
-    vr_lower_bound_ = -robot_.getTread() * max_angular / 2;
-    vl_upper_bound_ = max_linear + robot_.getTread() + max_angular / 2;
-    vr_upper_bound_ = max_linear + robot_.getTread() + max_angular / 2;
-}
-
 void DWA::setWindowResolution(Velocity resolution)
 {
-    const auto &linear_vel_resolution = resolution(0);
-    const auto &angular_vel_resolution = resolution(1);
-    double wheel_res1 = robot_.linResToWheelRes(linear_vel_resolution);
-    double wheel_res2 = robot_.angResToWheelRes(angular_vel_resolution);
+    const auto &linear_resolution = resolution(0);
+    const auto &angular_resolution = resolution(1);
+    double wheel_res1 = robot_.linResToWheelRes(linear_resolution);
+    double wheel_res2 = robot_.angResToWheelRes(angular_resolution);
     vlvr_resolution_ = std::min(wheel_res1, wheel_res2);
-}
-
-void DWA::setControlTimeInSec(double control_time)
-{
-    control_time_ = control_time;
 }
 
 void DWA::initialize()
 {
-    double max_vel_deviation = max_acceleration_ * control_time_;
-    size_ = 2 * (max_vel_deviation / vlvr_resolution_) + 1;
+    double maxdelta_vlvr = robot_.getMaxAccel() * robot_.getControlTime();
+    size_ = 2 * (maxdelta_vlvr / vlvr_resolution_) + 1;
 
-    VelCostPair zeroInit = {0,  // vl
-                            0,  // vr
-                            0,  // cost - target heading
-                            0,  // cost - clearance
-                            0,  // cost - velocity
-                            0,  // cost - global_path
-                            0}; // cost - total
-    window_.resize(size_, std::vector<VelCostPair>(size_, zeroInit));
+    VlVrCostPair zero_init = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    window_.resize(size_, std::vector<VlVrCostPair>(size_, zero_init));
 
     initialized_ = true;
 }
 
-void DWA::setVelocity(Velocity cmd_vel)
+void DWA::updateVelocity(Velocity cmd_vel)
 {
-    double vl_center, vr_center, vl_min, vr_min;
-    robot_.cmdvelToWheelvel(cmd_vel, vl_center, vr_center);
-    vl_min = vl_center - max_acceleration_ * control_time_;
-    vr_min = vr_center - max_acceleration_ * control_time_;
+    VlVrVelocity window_center, half_width, window_min;
+    robot_.cmdvelToWheelvel(cmd_vel, window_center);
+    half_width.setConstant(robot_.getMaxAccel() * robot_.getControlTime());
+    window_min = window_center - half_width;
+    const auto &min_vl = window_min(0);
+    const auto &min_vr = window_min(1);
 
     min_v_ = 1e3;
     max_v_ = -1e3;
@@ -231,19 +194,20 @@ void DWA::setVelocity(Velocity cmd_vel)
     {
         for (int j = 0; j < size_; ++j)
         {
-            auto &left_velocity = window_[i][j].vl;
-            auto &right_velocity = window_[i][j].vr;
-            left_velocity = vl_min + i * vlvr_resolution_;
-            right_velocity = vr_min + j * vlvr_resolution_;
-
-            if (!isValidWheelVelocity(left_velocity, right_velocity))
+            auto &vl = window_[i][j].vl;
+            auto &vr = window_[i][j].vr;
+            vl = min_vl + i * vlvr_resolution_;
+            vr = min_vr + j * vlvr_resolution_;
+            if (!isValidWheelVelocity(vl, vr))
             {
-                left_velocity = 0;
-                right_velocity = 0;
+                vl = 0;
+                vr = 0;
             }
-
-            double v, w;
-            robot_.wheelvelTocmdvel(Velocity(left_velocity, right_velocity), v, w);
+            // save min max linear vel
+            Velocity cmd_vel;
+            robot_.wheelvelTocmdvel(VlVrVelocity(vl, vr), cmd_vel);
+            window_[i][j].cost.velocity = cmd_vel(0);
+            const auto &v = cmd_vel(0);
             if (v > max_v_)
                 max_v_ = v;
             if (v < min_v_)
@@ -255,34 +219,29 @@ void DWA::setVelocity(Velocity cmd_vel)
 // pass all condition, then return true;
 bool DWA::isValidWheelVelocity(double vl, double vr)
 {
-    double v, w;
-    robot_.wheelvelTocmdvel(Velocity(vl, vr), v, w);
-
+    Velocity cmd_vel;
+    robot_.wheelvelTocmdvel(VlVrVelocity(vl, vr), cmd_vel);
+    const auto &v = cmd_vel(0);
+    const auto &w = cmd_vel(1);
     // 1. go backward
     if (v < 0)
         return false;
 
     // 2. over max linear velocity
-    const auto &max_linear_vel = robot_.getMaxCmdvel().x();
+    const auto &max_linear_vel = robot_.getMaxVel()(0);
     if (v > max_linear_vel)
         return false;
 
     // 3. over max angular velocity
-    const auto &max_angular_vel = robot_.getMaxCmdvel().y();
+    const auto &max_angular_vel = robot_.getMaxVel()(1);
     if (std::abs(w) > max_angular_vel)
         return false;
 
     return true;
 }
 
-void DWA::setGoal(Pose goal)
-{
-    goal_ = goal;
-}
-
 void DWA::updateCost()
 {
-    
 }
 
 bool DWA::resetCost()

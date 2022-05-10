@@ -74,46 +74,46 @@ void GlobalPlannerRos::goalCallback(const geometry_msgs::PoseStamped::ConstPtr &
 
 void GlobalPlannerRos::laserCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
 {
-    clk::time_point t1, t2;
+    // clk::time_point t1, t2;
 
-    if (!goal_received_)
-        return;
+    // if (!goal_received_)
+    //     return;
 
-    // laserScan type conversion
-    sensor_msgs::PointCloud2 laser_cloud;
-    scan2cloud_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
+    // // laserScan type conversion
+    // sensor_msgs::PointCloud2 laser_cloud;
+    // scan2cloud_.projectLaser(*msg, laser_cloud, -1, laser_geometry::channel_option::Intensity | laser_geometry::channel_option::Distance);
 
-    // transform cloud
-    const auto sensor_to_map = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);
-    pcl_ros::transformPointCloud("map", sensor_to_map, laser_cloud, laser_cloud);
-    pub_laser.publish(laser_cloud);
+    // // transform cloud
+    // const auto sensor_to_map = tf_.fuseTransform(tf_.SensorToBase, tf_.BaseToMap);
+    // pcl_ros::transformPointCloud("map", sensor_to_map, laser_cloud, laser_cloud);
+    // pub_laser.publish(laser_cloud);
 
-    // update Sensor map && visualize
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_m(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::fromROSMsg(laser_cloud, *cloud_m);
-    updateSensorMap(cloud_m, max_intrinsic_cost_);
-    publishSubmap(map_, pub_submap, Length(20, 20));
+    // // update Sensor map && visualize
+    // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_m(new pcl::PointCloud<pcl::PointXYZ>());
+    // pcl::fromROSMsg(laser_cloud, *cloud_m);
+    // updateSensorMap(cloud_m, max_intrinsic_cost_);
+    // publishSubmap(map_, pub_submap, Length(20, 20));
 
-    map_["obstacle_all"] = map_["intrinsic_cost"] + map_["obstacle_laser_raw"];
+    // map_["obstacle_all"] = map_["intrinsic_cost"] + map_["obstacle_laser_raw"];
 
-    updateRobotPosition(msg->header.stamp);
-    DijkstraSearch planner(map_, "obstacle_all", position_robot_, position_goal_);
-    if (!planner.findPath())
-        return;
+    // updateRobotPosition(msg->header.stamp);
+    // DijkstraSearch planner(map_, "obstacle_all", position_robot_, position_goal_);
+    // if (!planner.findPath())
+    //     return;
 
-    // publish global path
-    nav_msgs::Path msg_path_raw;
-    path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
-    pub_path.publish(msg_path_raw);
+    // // publish global path
+    // nav_msgs::Path msg_path_raw;
+    // path_converter_.toRosMsg(planner.getPath(), msg_path_raw);
+    // pub_path.publish(msg_path_raw);
 
-    map_["obstacle_all"] = map_["obstacle_static_raw"] + map_["obstacle_laser_raw"];
+    // map_["obstacle_all"] = map_["obstacle_static_raw"] + map_["obstacle_laser_raw"];
 
-    // modify global path locally && visualize
-    ElasticBands eband(map_, "obstacle_all", planner.getPath());
-    eband.update();
-    eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
-    pub_eband_path.publish(path_msg_);
-    pub_bubble.publish(bubble_msg_);
+    // // modify global path locally && visualize
+    // ElasticBands eband(map_, "obstacle_all", planner.getPath());
+    // eband.update();
+    // eband_converter_.toROSMsg(eband, bubble_msg_, path_msg_);
+    // pub_eband_path.publish(path_msg_);
+    // pub_bubble.publish(bubble_msg_);
 }
 
 void GlobalPlannerRos::localmapCallback(const grid_map_msgs::GridMapConstPtr &msg)

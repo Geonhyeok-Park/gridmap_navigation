@@ -6,7 +6,7 @@
 #define GRIDMAP_NAVIGATION_LOCAL_PLANNER_ROS_H
 
 #include <gridmap_navigation/tf_manager.h>
-#include <laser_geometry/laser_geometry.h>
+// #include <laser_geometry/laser_geometry.h>
 #include <gridmap_navigation/map_converter_ros.h>
 #include "dwa.h"
 
@@ -48,7 +48,7 @@ private:
 
     // parameters
 private:
-    ROBOT robot_;
+    ROBOT *pRobot_;
     double param_tread;
     double param_max_linear_vel;
     double param_max_angular_vel;
@@ -60,6 +60,10 @@ private:
     double param_angular_vel_res;
     double param_controltime;
 
+    grid_map::GridMap localmap_;
+
+    std::vector<Pose> sim_trajectory_;
+    // std::vector<std::vector<Pose>> trajectories_;
     double param_goal_distance;
 
     // grid_map::GridMap map_;
@@ -67,7 +71,7 @@ private:
 
 private:
     TFManagerRos tf_;
-    laser_geometry::LaserProjection scan2cloud_;
+    // laser_geometry::LaserProjection scan2cloud_;
 
 private:
     void velocityToRosMsg(const Velocity &, geometry_msgs::Twist &);
@@ -86,6 +90,8 @@ public:
 
     bool recieved_localmap_;
     void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
+
+    double checkCollision(const grid_map::GridMap &, const std::string &, Pose, double);
 };
 
 void LocalPlannerNode::velocityToRosMsg(const Velocity &vel, geometry_msgs::Twist &msg)

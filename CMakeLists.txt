@@ -98,6 +98,9 @@ add_library(${PROJECT_NAME}_local
   src/local_planner/dwa.cpp
 )
 
+add_library(${PROJECT_NAME}
+  src/global_planner/wavefront_costmap.cpp
+)
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -112,6 +115,10 @@ add_library(${PROJECT_NAME}_local
 
  add_executable(gridmap_local_planner
  src/local_planner_ros_node.cpp
+ )
+
+ add_executable(global_planner_node
+ src/global_planner/global_planner_node.cpp
  )
 
 ## Rename C++ executable without prefix
@@ -133,4 +140,9 @@ add_library(${PROJECT_NAME}_local
  target_link_libraries(gridmap_local_planner
  ${catkin_LIBRARIES}
  ${PROJECT_NAME}_local
+)
+
+target_link_libraries(global_planner_node
+${catkin_LIBRARIES}
+${PROJECT_NAME}
 )

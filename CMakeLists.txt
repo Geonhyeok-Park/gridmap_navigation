@@ -59,7 +59,7 @@ find_package(PCL REQUIRED COMPONENTS common)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES gridmap-navigation
+  LIBRARIES 
   CATKIN_DEPENDS 
   dynamic_reconfigure 
   grid_map_core 
@@ -99,7 +99,7 @@ add_library(${PROJECT_NAME}_local
 )
 
 add_library(${PROJECT_NAME}
-  src/global_planner/wavefront_costmap.cpp
+  src/global_planner/costmap_ros.cpp
 )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

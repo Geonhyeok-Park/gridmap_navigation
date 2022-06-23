@@ -5,7 +5,7 @@
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <tf2_ros/transform_listener.h>
-#include <gridmap_navigation/wavefront_costmap.h>
+#include <gridmap_navigation/costmap_ros.h>
 
 namespace grid_map
 {
@@ -17,7 +17,8 @@ namespace grid_map
         ros::Publisher pub_path;
         std::string pubtopic_path;
 
-        WaveFrontCostmap costmap_;
+        Costmap costmap_;  // need this to build...
+        std::unique_ptr<Costmap> costmapPtr_;
         bool costmap_initialized_;
         Position goal_position_;
         Position robot_position_;
@@ -40,7 +41,6 @@ namespace grid_map
 
         void updateGoalPosition(const geometry_msgs::Pose &goal);
         void updateRobotPosition(const ros::Time &time);
-        bool isArrived(const Position &, const Position &);
 
         void process();
     };

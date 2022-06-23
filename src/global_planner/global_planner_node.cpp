@@ -1,4 +1,5 @@
 #include <gridmap_navigation/global_planner_node.h>
+#include <grid_map_ros/GridMapRosConverter.hpp>
 
 #define duration_ms(a) std::chrono::duration_cast<std::chrono::milliseconds>(a).count()
 typedef std::chrono::high_resolution_clock clk;
@@ -8,47 +9,37 @@ namespace grid_map
     GlobalPlannerNode::GlobalPlannerNode(ros::NodeHandle &_nh)
         : nh(_nh),
           tf2_listener(tf2_buffer),
+          costmap_(),
           costmap_initialized_(false)
     {
         useParameterServer();
 
         if (use_global_map)
         {
-            costmap_.add("occupancy");
-
             ros::ServiceClient client;
             nav_msgs::GetMap service;
+            bool has_map = false;
             clk::time_point start_time = clk::now();
-            while (duration_ms(clk::now() - start_time) < 5000) // 5sec
+            while (!has_map && duration_ms(clk::now() - start_time) < 5000) // 5sec
             {
                 ROS_INFO("use Global map:: Wait until Global map is valid");
-                if (client.call(service))
-                {
-                    ROS_INFO("use Global map:: Global map received.");
-                    break;
-                }
+                has_map = client.call(service);
             }
 
-            if (!grid_map::OccupancyGridHandler::fromOccupancyGrid(service.response.map, "occupancy", costmap_))
+            if (!has_map)
             {
-                ROS_ERROR("Conversion from Occupancy map failed. Node Shutdown.");
+                ROS_ERROR("use Global map:: Global map not received... Node Shutdown");
                 nh.shutdown();
                 return;
             }
-
-            ROS_INFO("Conversion from Occupancy map succeeded. Node initializing...");
-            if (use_inflation)
-            {
-                grid_map::OccupancyGridHandler::inflateOccupancyGrid(param_inflation_size, "occupancy", costmap_);
-                ROS_INFO("Grid inflation succeeded.");
-            }
+            
+            ROS_INFO("use Global map:: Global map received.");
+            costmapPtr_.reset(new Costmap(service.response.map, 3));
         }
 
         else if (!use_global_map)
         {
-            // initialize empty map --> size, resolution
-            costmap_.setFrameId("map");
-            costmap_.setGeometry(Length(300, 300), 0.1);
+            costmap_.get("occupancy").setConstant(0);
         }
 
         // sub & pub
@@ -78,10 +69,10 @@ namespace grid_map
 
         // global planner search
         clk::time_point start_point = clk::now();
-        auto search_radius = WaveFrontCostmap::getDistance(robot_position_, goal_position_);
-        while (!costmap_.update("cost", robot_position_, goal_position_, search_radius))
+        auto search_radius = Costmap::getDistance(robot_position_, goal_position_);
+        while (!costmapPtr_->update(robot_position_, goal_position_))
         {
-            search_radius += WaveFrontCostmap::getDistance(robot_position_, goal_position_);
+            search_radius += Costmap::getDistance(robot_position_, goal_position_);
             clk::time_point check_point = clk::now();
             if (duration_ms(check_point - start_point) > TIME_LIMIT_MS)
             {
@@ -124,21 +115,6 @@ namespace grid_map
         ROS_INFO_STREAM("Updated Robot Position: " << robot_position_(0) << " " << robot_position_(1));
     }
 
-    bool GlobalPlannerNode::isArrived(const Position &robot, const Position &goal)
-    {
-        if (!costmap_initialized_)
-        {
-            ROS_DEBUG("Goal not initlized. Set goal before arrival check.");
-            return false;
-        }
-
-        auto distance = WaveFrontCostmap::getDistance(robot, goal);
-        if (distance < param_goal_acceptance)
-            return true;
-        else
-            return false;
-    }
-
     void GlobalPlannerNode::process()
     {
         ros::Rate loop_rate(param_Hz);
@@ -151,7 +127,7 @@ namespace grid_map
                 updateRobotPosition(ros::Time::now());
 
                 std::vector<Position> path;
-                if (!costmap_.findPath("cost", robot_position_, goal_position_, path))
+                if (!costmapPtr_->findPath(robot_position_, goal_position_, path))
                 {
                     ROS_WARN("No Valid Path Found from the Cost Map. Return empty Path");
                     // do we need clear path in here?

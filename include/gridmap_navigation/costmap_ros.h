@@ -18,7 +18,7 @@ namespace grid_map
         Costmap(nav_msgs::OccupancyGrid &occupancy_map, int inflation_size = 0);
         virtual ~Costmap() = default;
 
-        bool update(const Position &robot, const Position &goal);
+        bool update(const Position &robot, const Position &goal, int time_limit_ms = 2000);
 
         bool findPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 

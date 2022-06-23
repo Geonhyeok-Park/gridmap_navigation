@@ -10,12 +10,14 @@ namespace grid_map
     GlobalPlannerNode::GlobalPlannerNode(ros::NodeHandle &_nh)
         : nh(_nh),
           tf2_listener(tf2_buffer),
-          costmap_initialized_(false)
+          valid_cost_(false)
     {
         useParameterServer();
 
         if (use_global_map)
         {
+            ROS_INFO("Path Planning With Global Map!!");
+
             ros::ServiceClient client;
             nav_msgs::GetMap service;
             client = nh.serviceClient<nav_msgs::GetMap>("/static_map");
@@ -36,11 +38,13 @@ namespace grid_map
             }
 
             ROS_INFO("use Global map:: Global map received.");
-            costmapPtr_ = std::make_unique<Costmap>(service.response.map, 3);
+            costmapPtr_ = std::make_unique<Costmap>(service.response.map, param_inflation_size);
         }
 
         else if (!use_global_map)
         {
+            ROS_INFO("Path Planning Without Global Map!!");
+
             costmapPtr_ = std::make_unique<Costmap>();
             costmapPtr_->get("occupancy").setConstant(0);
         }
@@ -66,25 +70,18 @@ namespace grid_map
     void GlobalPlannerNode::goalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
     {
         const int TIME_LIMIT_MS = 2000;
-
+        valid_cost_ = false;
         updateGoalPosition(msg->pose);
         updateRobotPosition(msg->header.stamp);
-        publishCostmap();
 
         clk::time_point start_point = clk::now();
-        while (!costmapPtr_->update(robot_position_, goal_position_))
+        if(costmapPtr_->update(robot_position_, goal_position_, TIME_LIMIT_MS))
         {
-            if (duration_ms(clk::now() - start_point) > TIME_LIMIT_MS)
-            {
-                ROS_WARN("GRADIENT TIMEOUT! Update Costmap failed");
-                return;
-            }
+            valid_cost_ = true;
+            ROS_INFO("[Goal Callback] Found Valid Path.");
         }
-        if (!costmap_initialized_)
-            costmap_initialized_ = true;
 
         ROS_INFO_STREAM(duration_ms(clk::now() - start_point));
-
         publishCostmap();
     }
 
@@ -92,7 +89,7 @@ namespace grid_map
     {
         goal_position_(0) = goal.position.x;
         goal_position_(1) = goal.position.y;
-        ROS_INFO_STREAM("Updated Goal Position: " << goal_position_(0) << " " << goal_position_(1));
+        ROS_INFO_STREAM("Updated Goal Position: " << "[" << goal_position_(0) << ", " << goal_position_(1) << "]");
     }
 
     void GlobalPlannerNode::updateRobotPosition(const ros::Time &time)
@@ -120,28 +117,42 @@ namespace grid_map
         pub_map.publish(msg);
     }
 
+    void GlobalPlannerNode::toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg)
+    {
+        msg.header.frame_id = "map";
+        msg.header.stamp = ros::Time::now();
+
+        for (const auto &pathpoint : path)
+        {
+            geometry_msgs::PoseStamped poseMsg;
+            poseMsg.pose.position.x = pathpoint.x();
+            poseMsg.pose.position.y = pathpoint.y();
+            msg.poses.push_back(poseMsg);
+        }
+    }
+
     void GlobalPlannerNode::process()
     {
         ros::Rate loop_rate(param_Hz);
         while (ros::ok())
         {
-            if (!costmap_initialized_)
+            if (!valid_cost_)
             {
-                ROS_INFO_THROTTLE(1, "Cost Map needs to be Initialized. Set proper Goal First.");
                 ros::spinOnce();
                 loop_rate.sleep();
                 continue;
             }
 
             updateRobotPosition(ros::Time::now());
-
             std::vector<Position> path;
             if (!costmapPtr_->findPath(robot_position_, goal_position_, path))
             {
-                ROS_WARN("No Valid Path Found from the Cost Map. Return empty Path");
+                ROS_WARN("[Find Path] No Valid Path Found from the Current Position. Return empty Path");
                 // do we need clear path in here?
             }
-            ROS_INFO("test");
+            nav_msgs::Path msg;
+            toRosMsg(path, msg);
+            pub_path.publish(msg);
 
             ros::spinOnce();
             loop_rate.sleep();

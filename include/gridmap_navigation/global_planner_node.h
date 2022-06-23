@@ -20,7 +20,7 @@ namespace grid_map
         std::string pubtopic_map;
 
         std::unique_ptr<Costmap> costmapPtr_;
-        bool costmap_initialized_;
+        bool valid_cost_;
         Position goal_position_;
         Position robot_position_;
 
@@ -45,6 +45,7 @@ namespace grid_map
         void updateRobotPosition(const ros::Time &time);
 
         void publishCostmap();
+        void toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg);
     };
 
 }

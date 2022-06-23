@@ -1,7 +1,7 @@
 global_planner:
   # Params
-  useGlobalmap: true
-  inflationGridSize: 5
+  useGlobalMap: true
+  inflationGridSize: 3
   
 
   # Subscribe

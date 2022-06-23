@@ -5,16 +5,16 @@ typedef std::chrono::high_resolution_clock clk;
 
 namespace grid_map
 {
-    Costmap::Costmap() : GridMap({"occupancy", "cost"})
+    Costmap::Costmap() : GridMap({"occupancy", "cost", "history_x", "history_y"})
     {
-        setBasicLayers({"cost"});
+        // setBasicLayers({"cost"});
         setFrameId("map");
         setGeometry(Length(300, 300), 0.1);
     }
 
-    Costmap::Costmap(nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost"})
+    Costmap::Costmap(nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
     {
-        setBasicLayers({"cost"});
+        // setBasicLayers({"cost"});
         try
         {
             if (!fromOccupancyGrid(occupancy_grid, "occupancy", *this))
@@ -27,7 +27,7 @@ namespace grid_map
 
         if (inflation_size != 0)
         {
-            // inflateOccupancyGrid(inflation_size);
+            inflateOccupancyGrid(inflation_size);
             ROS_INFO("Grid Inflation Done.");
         }
 
@@ -42,7 +42,7 @@ namespace grid_map
         std::vector<Index> obstacles;
         for (GridMapIterator it(*this); !it.isPastEnd(); ++it)
         {
-            const auto state = at("inflation", *it);
+            const auto &state = at("occupancy", *it);
 
             // skip for Nan
             if (!std::isfinite(state))
@@ -54,6 +54,7 @@ namespace grid_map
             obstacles.push_back(*it);
         }
 
+        get("inflation") = get("occupancy");
         for (const auto &obstacle_index : obstacles)
         {
             Index start_index(inflation_size, inflation_size);
@@ -71,7 +72,7 @@ namespace grid_map
     }
 
     bool Costmap::fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid,
-                                             const std::string &layer, grid_map::GridMap &gridMap)
+                                    const std::string &layer, grid_map::GridMap &gridMap)
     {
         const Size size(occupancyGrid.info.width, occupancyGrid.info.height);
         const double resolution = occupancyGrid.info.resolution;
@@ -118,14 +119,14 @@ namespace grid_map
         return true;
     }
 
-    bool Costmap::update(const Position &robot, const Position &goal)
+    bool Costmap::update(const Position &robot, const Position &goal, int time_limit_ms)
     {
         clear("cost");
-        add("history_x");
-        add("history_y");
+        clear("history_x");
+        clear("history_y");
 
+        const auto &occupancymap = (std::find(getLayers().begin(), getLayers().end(), "inflation") != getLayers().end() ? get("inflation") : get("occupancy"));
         auto &costmap = get("cost");
-        const auto &occupancymap = get("occupancy");
         auto &historymap_x = get("history_x");
         auto &historymap_y = get("history_y");
 
@@ -142,11 +143,13 @@ namespace grid_map
         }
 
         std::priority_queue<CostCell> visited_list;
-        int size_neighbor = 1;
-        Index index_offset(size_neighbor, size_neighbor);
-        Index search_buffer(2 * size_neighbor + 1, 2 * size_neighbor + 1);
-
         visited_list.push(CostCell(goal_index, 1.0));
+
+        int neighbor_size = 1;
+        Index index_offset(neighbor_size, neighbor_size);
+        Index search_buffer(2 * neighbor_size + 1, 2 * neighbor_size + 1);
+
+        clk::time_point start_time = clk::now();
         while (!visited_list.empty())
         {
             const auto prioritycell = visited_list.top();
@@ -154,11 +157,16 @@ namespace grid_map
             getPosition(prioritycell.index, prioritycell_position);
             visited_list.pop();
 
+            if (duration_ms(clk::now() - start_time) > time_limit_ms)
+            {
+                ROS_WARN("TIMEOUT! Suspend Searching...Set Closer Goal");
+                return false;
+            }
+
             if (std::isfinite(atPosition("cost", robot)))
                 return true;
 
             SubmapIterator neighbor_iterator(*this, prioritycell.index - index_offset, search_buffer);
-            ROS_INFO("test1");
             for (neighbor_iterator; !neighbor_iterator.isPastEnd(); ++neighbor_iterator)
             {
                 const auto &neighbor_index = *neighbor_iterator;
@@ -196,7 +204,6 @@ namespace grid_map
                 }
             }
         }
-
         return false;
     }
 
@@ -217,14 +224,14 @@ namespace grid_map
         pathpoint_index = robot_index;
         const auto &history_x = get("history_x");
         const auto &history_y = get("history_y");
-        while (pathpoint_index.isApprox(goal_index))
+        while (!pathpoint_index.isApprox(goal_index))
         {
             auto pathpoint_x = history_x(pathpoint_index(0), pathpoint_index(1));
             auto pathpoint_y = history_y(pathpoint_index(0), pathpoint_index(1));
             if (std::isfinite(pathpoint_x))
             {
                 Position pathpoint(pathpoint_x, pathpoint_y);
-                path.push_back(pathpoint);
+                path.push_back(pathpoint);  
 
                 if (!getIndex(pathpoint, pathpoint_index))
                     return false;

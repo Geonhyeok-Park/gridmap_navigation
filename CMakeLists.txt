@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_ros
   laser_geometry
   pcl_ros
+  map_server
 )
 
 find_package(PCL REQUIRED COMPONENTS common)
@@ -118,7 +119,7 @@ add_library(${PROJECT_NAME}
  )
 
  add_executable(global_planner_node
- src/global_planner/global_planner_node.cpp
+ src/global_planner/global_planner_node.cpp ${SOURCE}
  )
 
 ## Rename C++ executable without prefix

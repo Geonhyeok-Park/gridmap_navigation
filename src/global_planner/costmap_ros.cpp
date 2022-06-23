@@ -132,12 +132,12 @@ namespace grid_map
         Index robot_index, goal_index;
         if (!getIndex(robot, robot_index))
         {
-            ROS_WARN("[update] Failed to get Index from robot position.");
+            ROS_WARN_THROTTLE(1, "[update Costmap] Failed to get Index from robot position.");
             return false;
         }
         if (!getIndex(goal, goal_index))
         {
-            ROS_WARN("[update] Failed to get Index from Goal position.");
+            ROS_WARN_THROTTLE(1, "[update Costmap] Failed to get Index from Goal position.");
             return false;
         }
 
@@ -147,7 +147,6 @@ namespace grid_map
         Index search_buffer(2 * size_neighbor + 1, 2 * size_neighbor + 1);
 
         visited_list.push(CostCell(goal_index, 1.0));
-
         while (!visited_list.empty())
         {
             const auto prioritycell = visited_list.top();
@@ -159,6 +158,7 @@ namespace grid_map
                 return true;
 
             SubmapIterator neighbor_iterator(*this, prioritycell.index - index_offset, search_buffer);
+            ROS_INFO("test1");
             for (neighbor_iterator; !neighbor_iterator.isPastEnd(); ++neighbor_iterator)
             {
                 const auto &neighbor_index = *neighbor_iterator;
@@ -176,12 +176,6 @@ namespace grid_map
                 const auto &neighbor_occupancy = occupancymap(neighbor_index(0), neighbor_index(1));
                 if (!std::isfinite(neighbor_occupancy) || neighbor_occupancy > 0)
                     continue;
-
-                // // only search in search radius
-                // const auto center_position = (robot + goal) / 2;
-                // double margin = 3.0;
-                // if (getDistance(center_position, neighbor_position) > search_radius + margin)
-                //     continue;
 
                 auto &neighbor_cost = costmap(neighbor_index(0), neighbor_index(1));
                 auto &neighbor_history_x = historymap_x(neighbor_index(0), neighbor_index(1));
@@ -211,12 +205,12 @@ namespace grid_map
         Index robot_index, goal_index, pathpoint_index;
         if (!getIndex(robot, robot_index))
         {
-            ROS_WARN("[FindPath] Failed to get Index from robot position.");
+            ROS_WARN_THROTTLE(1, "[FindPath] Failed to get Index from robot position.");
             return false;
         }
         if (!getIndex(goal, goal_index))
         {
-            ROS_WARN("[FindPath] Failed to get Index from Goal position.");
+            ROS_WARN_THROTTLE(1, "[FindPath] Failed to get Index from Goal position.");
             return false;
         }
 

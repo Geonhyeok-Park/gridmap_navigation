@@ -84,6 +84,7 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>message_runtime</exec_depend>
   <depend>eigen </depend>
+  <depend>map_server</depend>>
 
 
   <!-- The export tag contains other, unspecified, tags -->

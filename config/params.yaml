@@ -1,25 +1,16 @@
 global_planner:
-
-  usePrebuiltMap: true
+  # Params
+  useGlobalmap: true
+  inflationGridSize: 5
   
-  #######################
-  sensorFrameId: "velodyne_tilted"
 
   # Subscribe
-  # occupancy map: given by service
-  laserScanTopic: "/tim581_front/sca"
+  gridMapTopic: "/gridmap" 
   localmapTopic: "/traversability/map2"
-
+  globalPathTopic: "/global_path"
   # Publish
-  globalMapTopic: "/gridmap"
-  globaSubmapTopic: "/gridmap_sub"
-  dijkstraPathTopic: "/path_raw2"
-  ebandPathTopic: "/path_banded"
-  ebandBubbleTopic: "/elastic_band"
 
-  # Params
-  inflationGridSize: 5
-  useGlobalmap: false
+
 
 local_planner:
   test: "done"

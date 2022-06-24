@@ -89,15 +89,15 @@ include_directories(
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME}_global
-  src/global_planner/global_planner_ros.cpp 
-  src/global_planner/dijkstra_search.cpp 
-  src/global_planner/elastic_bands.cpp
-)
-add_library(${PROJECT_NAME}_local
-  src/local_planner/local_planner_ros.cpp
-  src/local_planner/dwa.cpp
-)
+# add_library(${PROJECT_NAME}_global
+#   src/global_planner/global_planner_ros.cpp 
+#   src/global_planner/dijkstra_search.cpp 
+#   src/global_planner/elastic_bands.cpp
+# )
+# add_library(${PROJECT_NAME}_local
+#   src/local_planner/local_planner_ros.cpp
+#   src/local_planner/dwa.cpp
+# )
 
 add_library(${PROJECT_NAME}
   src/global_planner/costmap_ros.cpp
@@ -110,13 +110,13 @@ add_library(${PROJECT_NAME}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
- add_executable(gridmap_global_planner 
- src//global_planner_ros_node.cpp 
- )
+#  add_executable(gridmap_global_planner 
+#  src//global_planner_ros_node.cpp 
+#  )
 
- add_executable(gridmap_local_planner
- src/local_planner_ros_node.cpp
- )
+#  add_executable(gridmap_local_planner
+#  src/local_planner_ros_node.cpp
+#  )
 
  add_executable(global_planner_node
  src/global_planner/global_planner_node.cpp ${SOURCE}
@@ -133,15 +133,15 @@ add_library(${PROJECT_NAME}
 # add_dependencies(gridmap_nav_planner ${PROJECT_NAME}_gencfg)
 
 ## Specify libraries to link a library or executable target against
- target_link_libraries(gridmap_global_planner
-   ${catkin_LIBRARIES}
-   ${PROJECT_NAME}_global
- )
+#  target_link_libraries(gridmap_global_planner
+#    ${catkin_LIBRARIES}
+#    ${PROJECT_NAME}_global
+#  )
 
- target_link_libraries(gridmap_local_planner
- ${catkin_LIBRARIES}
- ${PROJECT_NAME}_local
-)
+#  target_link_libraries(gridmap_local_planner
+#  ${catkin_LIBRARIES}
+#  ${PROJECT_NAME}_local
+# )
 
 target_link_libraries(global_planner_node
 ${catkin_LIBRARIES}

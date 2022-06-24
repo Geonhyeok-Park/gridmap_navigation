@@ -1,8 +1,7 @@
 #include <gridmap_navigation/global_planner_node.h>
 
-#include <memory>
-
 #define duration_ms(a) std::chrono::duration_cast<std::chrono::milliseconds>(a).count()
+#define duration_us(a) std::chrono::duration_cast<std::chrono::microseconds>(a).count()
 typedef std::chrono::high_resolution_clock clk;
 
 namespace grid_map
@@ -25,9 +24,8 @@ namespace grid_map
             clk::time_point start_time = clk::now();
             while (!service_responsed && duration_ms(clk::now() - start_time) < 5000) // 5sec
             {
-                ROS_INFO("use Global map:: Wait until Global map is valid");
+                ROS_INFO_THROTTLE(1, "use Global map:: Wait until Global map is valid");
                 service_responsed = client.call(service);
-                ros::Duration(1.0).sleep();
             }
 
             if (!service_responsed)
@@ -39,14 +37,14 @@ namespace grid_map
 
             ROS_INFO("use Global map:: Global map received.");
             costmapPtr_ = std::make_unique<Costmap>(service.response.map, param_inflation_size);
+            costmapPtr_->setTimeLimit(param_timelimit_ms);
         }
 
         else if (!use_global_map)
         {
             ROS_INFO("Path Planning Without Global Map!!");
-
             costmapPtr_ = std::make_unique<Costmap>();
-            costmapPtr_->get("occupancy").setConstant(0);
+            costmapPtr_->setTimeLimit(param_timelimit_ms);
         }
 
         // sub & pub
@@ -57,39 +55,80 @@ namespace grid_map
         ROS_INFO_STREAM("Global Planner Node Initialized. Wait for the topic " << sub_goal.getTopic());
     }
 
-    void GlobalPlannerNode::useParameterServer()
+    void GlobalPlannerNode::process()
     {
-        nh.param<std::string>("globalPathTopic", pubtopic_path, "/global_path");
-        nh.param<std::string>("gridMapTopic", pubtopic_map, "/gridmap");
-        nh.param<bool>("useGlobalMap", use_global_map, false);
+        ros::Rate loop_rate(param_Hz);
+        while (ros::ok())
+        {
+            if (!valid_cost_)
+            {
+                ros::spinOnce();
+                loop_rate.sleep();
+                continue;
+            }
 
-        nh.param<int>("inflationGridSize", param_inflation_size, 3);
-        nh.param<int>("frequency", param_Hz, 10);
+            updateRobotPosition(ros::Time::now());
+            std::vector<Position> path;
+            if (!costmapPtr_->findPath(robot_position_, goal_position_, path))
+            {
+                ROS_WARN("[Find Path] No Valid Path Found from the Current Position. Return empty Path");
+                // clear path in here?
+            }
+
+            smoothing(path, 10);
+
+            // Do something to create bubble with costmap, local costmap, and 
+            // 1. filter path points in close range (local area : suppose 5 meter)
+            // 2. With local grid map, for all points, search with spiral iterator and find distance from closest obstacle
+            // 3. move bubble position --> How? ex. move away with the direction vector (point - obstacle), then sort with distance from the robot
+            //     1) movable: calculated new position is on the valid cost map >> ok
+            //     2) not movable: calculated new position is out of the valid cost map >> do not publish local paths
+            // 4. recalculate bubble size with occupancy map
+
+            nav_msgs::Path msg;
+            toRosMsg(path, msg);
+            pub_path.publish(msg);
+
+            ros::spinOnce();
+            loop_rate.sleep();
+        }
     }
 
     void GlobalPlannerNode::goalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
     {
-        const int TIME_LIMIT_MS = 2000;
         valid_cost_ = false;
         updateGoalPosition(msg->pose);
         updateRobotPosition(msg->header.stamp);
 
         clk::time_point start_point = clk::now();
-        if(costmapPtr_->update(robot_position_, goal_position_, TIME_LIMIT_MS))
+        if (!costmapPtr_->update(robot_position_, goal_position_))
         {
-            valid_cost_ = true;
-            ROS_INFO("[Goal Callback] Found Valid Path.");
+            ROS_WARN("[Goal Callback] Stopped Glboal Path Topic");
+            return;
         }
+        valid_cost_ = true;
 
-        ROS_INFO_STREAM(duration_ms(clk::now() - start_point));
+        ROS_INFO_STREAM("Update Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
         publishCostmap();
+    }
+
+    void GlobalPlannerNode::useParameterServer()
+    {
+        nh.param<std::string>("globalPathTopic", pubtopic_path, "path");
+        nh.param<std::string>("gridMapTopic", pubtopic_map, "map");
+        nh.param<bool>("useGlobalMap", use_global_map, true);
+
+        nh.param<int>("inflationGridSize", param_inflation_size, 3);
+        nh.param<int>("frequency", param_Hz, 10);
+        nh.param<int>("maxProcessTime", param_timelimit_ms, 2000); // 2 sec
     }
 
     void GlobalPlannerNode::updateGoalPosition(const geometry_msgs::Pose &goal)
     {
         goal_position_(0) = goal.position.x;
         goal_position_(1) = goal.position.y;
-        ROS_INFO_STREAM("Updated Goal Position: " << "[" << goal_position_(0) << ", " << goal_position_(1) << "]");
+        ROS_INFO_STREAM("Updated Goal Position: "
+                        << "[" << goal_position_(0) << ", " << goal_position_(1) << "]");
     }
 
     void GlobalPlannerNode::updateRobotPosition(const ros::Time &time)
@@ -111,6 +150,7 @@ namespace grid_map
 
     void GlobalPlannerNode::publishCostmap()
     {
+        
         grid_map_msgs::GridMap msg;
         GridMapRosConverter::toMessage(*costmapPtr_, msg);
         msg.info.header.stamp = ros::Time::now();
@@ -128,34 +168,6 @@ namespace grid_map
             poseMsg.pose.position.x = pathpoint.x();
             poseMsg.pose.position.y = pathpoint.y();
             msg.poses.push_back(poseMsg);
-        }
-    }
-
-    void GlobalPlannerNode::process()
-    {
-        ros::Rate loop_rate(param_Hz);
-        while (ros::ok())
-        {
-            if (!valid_cost_)
-            {
-                ros::spinOnce();
-                loop_rate.sleep();
-                continue;
-            }
-
-            updateRobotPosition(ros::Time::now());
-            std::vector<Position> path;
-            if (!costmapPtr_->findPath(robot_position_, goal_position_, path))
-            {
-                ROS_WARN("[Find Path] No Valid Path Found from the Current Position. Return empty Path");
-                // do we need clear path in here?
-            }
-            nav_msgs::Path msg;
-            toRosMsg(path, msg);
-            pub_path.publish(msg);
-
-            ros::spinOnce();
-            loop_rate.sleep();
         }
     }
 

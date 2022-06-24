@@ -9,6 +9,8 @@ namespace grid_map
     class Costmap : public GridMap
     {
     private:
+        int time_limit_ms_ = 2000;
+    private:
         bool fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid,
                                const std::string &layer, grid_map::GridMap &gridMap);
         void inflateOccupancyGrid(int inflation_size);
@@ -18,7 +20,9 @@ namespace grid_map
         Costmap(nav_msgs::OccupancyGrid &occupancy_map, int inflation_size = 0);
         virtual ~Costmap() = default;
 
-        bool update(const Position &robot, const Position &goal, int time_limit_ms = 2000);
+        void setTimeLimit(int time_ms) { time_limit_ms_ = time_ms; };
+
+        bool update(const Position &robot, const Position &goal);
 
         bool findPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 

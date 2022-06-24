@@ -19,18 +19,19 @@ namespace grid_map
         std::string pubtopic_path;
         std::string pubtopic_map;
 
+        tf2_ros::Buffer tf2_buffer;
+        tf2_ros::TransformListener tf2_listener;
+
         std::unique_ptr<Costmap> costmapPtr_;
         bool valid_cost_;
         Position goal_position_;
         Position robot_position_;
 
-        tf2_ros::Buffer tf2_buffer;
-        tf2_ros::TransformListener tf2_listener;
-
         // options
         bool use_global_map;
         int param_inflation_size;
         int param_Hz;
+        int param_timelimit_ms;
 
     public:
         GlobalPlannerNode(ros::NodeHandle &);
@@ -48,4 +49,22 @@ namespace grid_map
         void toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg);
     };
 
+}
+
+void smoothing(std::vector<grid_map::Position> &path, int neighbor)
+{
+    std::vector<grid_map::Position> path_copy = path;
+    for (int i = neighbor; i < path.size() - neighbor; i++)
+    {
+        auto &waypoint_center = path.at(i);
+        auto num_neighbors = 2 * neighbor + 1;
+        for (int j = -neighbor; j <= neighbor; j++)
+        {
+            if (j == 0)
+                continue;
+            waypoint_center += path_copy.at(i + j);
+        }
+        waypoint_center(0) /= num_neighbors;
+        waypoint_center(1) /= num_neighbors;
+    }
 }

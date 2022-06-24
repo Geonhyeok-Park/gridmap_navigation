@@ -10,6 +10,7 @@ namespace grid_map
         // setBasicLayers({"cost"});
         setFrameId("map");
         setGeometry(Length(300, 300), 0.1);
+        get("occupancy").setConstant(0);
     }
 
     Costmap::Costmap(nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
@@ -119,7 +120,7 @@ namespace grid_map
         return true;
     }
 
-    bool Costmap::update(const Position &robot, const Position &goal, int time_limit_ms)
+    bool Costmap::update(const Position &robot, const Position &goal)
     {
         clear("cost");
         clear("history_x");
@@ -133,17 +134,23 @@ namespace grid_map
         Index robot_index, goal_index;
         if (!getIndex(robot, robot_index))
         {
-            ROS_WARN_THROTTLE(1, "[update Costmap] Failed to get Index from robot position.");
+            ROS_WARN_THROTTLE(1, "[update Costmap] Robot is Out of Map Boundary. Failed to get Index from robot position.");
             return false;
         }
         if (!getIndex(goal, goal_index))
         {
-            ROS_WARN_THROTTLE(1, "[update Costmap] Failed to get Index from Goal position.");
+            ROS_WARN_THROTTLE(1, "[update Costmap] Goal is Out of Map Boundary. Failed to get Index from Goal position.");
+            return false;
+        }
+        const auto &goal_state = occupancymap(goal_index(0), goal_index(1));
+        if (!std::isfinite(goal_state) || goal_state > 0) // goal in unknown or occupied grid
+        {
+            ROS_WARN_THROTTLE(1, "[update Costmap] Please put Goal into Valid Region. Failed to Update Costmap.");
             return false;
         }
 
         std::priority_queue<CostCell> visited_list;
-        visited_list.push(CostCell(goal_index, 1.0));
+        visited_list.push(CostCell(robot_index, 1.0));
 
         int neighbor_size = 1;
         Index index_offset(neighbor_size, neighbor_size);
@@ -157,13 +164,13 @@ namespace grid_map
             getPosition(prioritycell.index, prioritycell_position);
             visited_list.pop();
 
-            if (duration_ms(clk::now() - start_time) > time_limit_ms)
+            if (duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
-                ROS_WARN("TIMEOUT! Suspend Searching...Set Closer Goal");
+                ROS_WARN("[Update Costmap] TIMEOUT! Suspend Searching...Set Closer Goal");
                 return false;
             }
 
-            if (std::isfinite(atPosition("cost", robot)))
+            if (std::isfinite(atPosition("cost", goal)))
                 return true;
 
             SubmapIterator neighbor_iterator(*this, prioritycell.index - index_offset, search_buffer);
@@ -204,6 +211,7 @@ namespace grid_map
                 }
             }
         }
+        ROS_WARN("[Update Costmap] Searched All Connected Grid Cells. Goal is blocked from the Robot.");
         return false;
     }
 
@@ -212,20 +220,26 @@ namespace grid_map
         Index robot_index, goal_index, pathpoint_index;
         if (!getIndex(robot, robot_index))
         {
-            ROS_WARN_THROTTLE(1, "[FindPath] Failed to get Index from robot position.");
+            ROS_WARN_THROTTLE(1, "[Current Path] Robot is Out of Map Boundary. Failed to get Index from robot position.");
             return false;
         }
         if (!getIndex(goal, goal_index))
         {
-            ROS_WARN_THROTTLE(1, "[FindPath] Failed to get Index from Goal position.");
+            ROS_WARN_THROTTLE(1, "[Current Path] Goal is Out of Map Boundary. Failed to get Index from Goal position.");
             return false;
         }
 
-        pathpoint_index = robot_index;
+        pathpoint_index = goal_index;
         const auto &history_x = get("history_x");
         const auto &history_y = get("history_y");
-        while (!pathpoint_index.isApprox(goal_index))
+        clk::time_point start_time = clk::now();
+        while (!pathpoint_index.isApprox(robot_index))
         {
+            if ( duration_ms(clk::now() - start_time) > time_limit_ms_)
+            {
+                ROS_WARN("TIMEOUT!! Finding Path from Cost map Failed.");
+                return false;
+            }
             auto pathpoint_x = history_x(pathpoint_index(0), pathpoint_index(1));
             auto pathpoint_y = history_y(pathpoint_index(0), pathpoint_index(1));
             if (std::isfinite(pathpoint_x))
@@ -234,12 +248,14 @@ namespace grid_map
                 path.push_back(pathpoint);  
 
                 if (!getIndex(pathpoint, pathpoint_index))
+                {
+                    ROS_WARN_THROTTLE(1, "[Current Path] Waypoint is Out of Map Boundary. Failed to get Index from waypoint position.");
                     return false;
+                }
             }
             else
             {
                 ROS_WARN("[FindPath] Current Robot position has never been visited when Planning.");
-                // TODO: find nearest valid visited cell
                 return false;
             }
         }

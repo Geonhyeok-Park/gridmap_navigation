@@ -1,14 +1,12 @@
 global_planner:
   # Params
   useGlobalMap: true
-  inflationGridSize: 3
-  
+  inflationGridSize: 6
+  maxProcessTime: 2000 # milisecond
 
-  # Subscribe
-  gridMapTopic: "/gridmap" 
-  localmapTopic: "/traversability/map2"
-  globalPathTopic: "/global_path"
   # Publish
+  gridMapTopic: "/gridmap" 
+  globalPathTopic: "/global_path"
 
 
 

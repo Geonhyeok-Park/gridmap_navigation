@@ -9,11 +9,12 @@ namespace grid_map
     GlobalPlannerNode::GlobalPlannerNode(ros::NodeHandle &_nh)
         : nh(_nh),
           tf2_listener(tf2_buffer),
-          valid_cost_(false)
+          costmap_updated_(false),
+          path_updated_(false)
     {
         useParameterServer();
 
-        if (use_global_map)
+        if (param_use_globalmap)
         {
             ROS_INFO("Path Planning With Global Map!!");
 
@@ -40,7 +41,7 @@ namespace grid_map
             costmapPtr_->setTimeLimit(param_timelimit_ms);
         }
 
-        else if (!use_global_map)
+        else if (!param_use_globalmap)
         {
             ROS_INFO("Path Planning Without Global Map!!");
             costmapPtr_ = std::make_unique<Costmap>();
@@ -48,46 +49,50 @@ namespace grid_map
         }
 
         // sub & pub
-        sub_goal = nh.subscribe("/move_base_simple/goal", 10, &GlobalPlannerNode::goalCallback, this);
-        pub_path = nh.advertise<nav_msgs::Path>(pubtopic_path, 10);
-        pub_map = nh.advertise<grid_map_msgs::GridMap>(pubtopic_map, 1);
+        sub_goal = nh.subscribe("/move_base_simple/goal", 1, &GlobalPlannerNode::goalCallback, this);
+        sub_localmap = nh.subscribe(param_sub_localmap, 1, &GlobalPlannerNode::localmapCallback, this);
+        pub_path = nh.advertise<nav_msgs::Path>(param_pub_path, 10);
+        pub_localpath = nh.advertise<nav_msgs::Path>(param_pub_localpath, 10);
+        pub_ebandmarker = nh.advertise<visualization_msgs::MarkerArray>(param_pub_eband, 10);
+        pub_map = nh.advertise<grid_map_msgs::GridMap>(param_pub_map, 1);
 
         ROS_INFO_STREAM("Global Planner Node Initialized. Wait for the topic " << sub_goal.getTopic());
     }
 
-    void GlobalPlannerNode::process()
+    void GlobalPlannerNode::run()
     {
         ros::Rate loop_rate(param_Hz);
         while (ros::ok())
         {
-            if (!valid_cost_)
+            if (!costmap_updated_) // Check new callbacks in given rates when costmap not initialized or failed to update
             {
                 ros::spinOnce();
                 loop_rate.sleep();
                 continue;
             }
 
-            updateRobotPosition(ros::Time::now());
-            std::vector<Position> path;
-            if (!costmapPtr_->findPath(robot_position_, goal_position_, path))
+            if (!updateRobotPosition(ros::Time::now())) // Check robot tf in given rates
             {
-                ROS_WARN("[Find Path] No Valid Path Found from the Current Position. Return empty Path");
-                // clear path in here?
+                ROS_WARN_THROTTLE(1, "[Process] Update Robot Position Failed. Check TF tree from map to base_link");
+                loop_rate.sleep();
+                continue;
             }
 
-            smoothing(path, 10);
-
-            // Do something to create bubble with costmap, local costmap, and 
-            // 1. filter path points in close range (local area : suppose 5 meter)
-            // 2. With local grid map, for all points, search with spiral iterator and find distance from closest obstacle
-            // 3. move bubble position --> How? ex. move away with the direction vector (point - obstacle), then sort with distance from the robot
-            //     1) movable: calculated new position is on the valid cost map >> ok
-            //     2) not movable: calculated new position is out of the valid cost map >> do not publish local paths
-            // 4. recalculate bubble size with occupancy map
-
+            path_updated_ = false;
+            path_.clear();
+            if (!costmapPtr_->findGlobalPath(robot_position_, goal_position_, path_)) //
+            {
+                ROS_WARN_THROTTLE(1, "[Process] No Valid Path Found from the Current Position. Return empty Path");
+                // clear path in here?
+                ros::spinOnce();
+                loop_rate.sleep();
+                continue;
+            }
+            // smoothing(path_, 10);
             nav_msgs::Path msg;
-            toRosMsg(path, msg);
+            toRosMsg(path_, msg);
             pub_path.publish(msg);
+            path_updated_ = true;
 
             ros::spinOnce();
             loop_rate.sleep();
@@ -96,9 +101,13 @@ namespace grid_map
 
     void GlobalPlannerNode::goalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
     {
-        valid_cost_ = false;
+        costmap_updated_ = false;
         updateGoalPosition(msg->pose);
-        updateRobotPosition(msg->header.stamp);
+        if (!updateRobotPosition(msg->header.stamp))
+        {
+            ROS_WARN("[Goal Callback] Update Robot Position Failed. Check TF tree from map to base_link");
+            return;
+        }
 
         clk::time_point start_point = clk::now();
         if (!costmapPtr_->update(robot_position_, goal_position_))
@@ -106,17 +115,58 @@ namespace grid_map
             ROS_WARN("[Goal Callback] Stopped Glboal Path Topic");
             return;
         }
-        valid_cost_ = true;
+        costmap_updated_ = true;
 
         ROS_INFO_STREAM("Update Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
         publishCostmap();
     }
 
+
+    // TODO: smoothing algorighm :start point and end point has to be also smoothed 
+    // 5. Condition to return global path: bubble no longer overlaps
+    void GlobalPlannerNode::localmapCallback(const grid_map_msgs::GridMapConstPtr &msg)
+    {
+        clk::time_point start_point = clk::now();
+
+        if (!path_updated_)
+            return;
+
+        GridMap localmap;
+        // std::vector<std::string> copy_layers = {"occupancy", "inflation"};
+        std::vector<std::string> copy_layers = {"occupancy"};
+
+        GridMapRosConverter::fromMessage(*msg, localmap, copy_layers, false, false);
+
+        ElasticBand eband(path_, 15);
+        if (!eband.update(localmap, costmapPtr_))
+        {
+            ROS_WARN("[Localmap Callback] Update Local Path Failed. Return No Path!");
+            return;
+        }
+
+        // smoothing is valid!! TODO: change publish things
+        std::vector<Position> path;
+        smoothing_eband(eband, 5, path);
+        nav_msgs::Path path_msg;
+        toRosMsg(path, path_msg);
+        ROS_ERROR_STREAM(path_msg.poses.size());
+
+        // visualization_msgs::MarkerArray bubble_msg;
+        // eband.toRosMsg(bubble_msg, path_msg);
+        pub_localpath.publish(path_msg);
+        // pub_ebandmarker.publish(bubble_msg);
+        ROS_INFO_STREAM("Local + smoothing takes " << duration_ms(clk::now() - start_point) << "ms");
+
+    }
+
     void GlobalPlannerNode::useParameterServer()
     {
-        nh.param<std::string>("globalPathTopic", pubtopic_path, "path");
-        nh.param<std::string>("gridMapTopic", pubtopic_map, "map");
-        nh.param<bool>("useGlobalMap", use_global_map, true);
+        nh.param<std::string>("globalPathTopic", param_pub_path, "path");
+        nh.param<std::string>("localPathTopic", param_pub_localpath, "local_path");
+
+        nh.param<std::string>("gridMapTopic", param_pub_map, "map");
+        nh.param<std::string>("localMapTopic", param_sub_localmap, "localmap");
+        nh.param<bool>("useGlobalMap", param_use_globalmap, true);
 
         nh.param<int>("inflationGridSize", param_inflation_size, 3);
         nh.param<int>("frequency", param_Hz, 10);
@@ -131,26 +181,26 @@ namespace grid_map
                         << "[" << goal_position_(0) << ", " << goal_position_(1) << "]");
     }
 
-    void GlobalPlannerNode::updateRobotPosition(const ros::Time &time)
+    bool GlobalPlannerNode::updateRobotPosition(const ros::Time &time)
     {
-        geometry_msgs::TransformStamped localization_pose;
+        geometry_msgs::TransformStamped robot_pose;
         try
         {
-            localization_pose = tf2_buffer.lookupTransform("map", "base_link", time, ros::Duration(1.0));
+            robot_pose = tf2_buffer.lookupTransform("map", "base_link", time, ros::Duration(1.0));
         }
         catch (tf2::TransformException &ex)
         {
             ROS_ERROR("%s", ex.what());
-            return;
+            return false;
         }
-
-        robot_position_(0) = localization_pose.transform.translation.x;
-        robot_position_(1) = localization_pose.transform.translation.y;
+        robot_position_(0) = robot_pose.transform.translation.x;
+        robot_position_(1) = robot_pose.transform.translation.y;
+        return true;
     }
 
     void GlobalPlannerNode::publishCostmap()
     {
-        
+
         grid_map_msgs::GridMap msg;
         GridMapRosConverter::toMessage(*costmapPtr_, msg);
         msg.info.header.stamp = ros::Time::now();
@@ -182,7 +232,7 @@ int main(int argc, char **argv)
     grid_map::GlobalPlannerNode node(node_handle); // pass handle
 
     ros::Duration(1.0).sleep(); // Need this to get the TF caches fill up.
-    node.process();
+    node.run();
 
     return 0;
 }

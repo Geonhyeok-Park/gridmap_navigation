@@ -1,12 +1,14 @@
 global_planner:
   # Params
   useGlobalMap: true
-  inflationGridSize: 6
+  inflationGridSize: 1
   maxProcessTime: 2000 # milisecond
 
   # Publish
   gridMapTopic: "/gridmap" 
   globalPathTopic: "/global_path"
+  localPathTopic: "/local_path"
+  localMapTopic: "/gridmap"
 
 
 

@@ -109,7 +109,7 @@ namespace grid_map
         // Reverse iteration is required because of different conventions
         // between occupancy grid and grid map.
         grid_map::Matrix data(size(0), size(1));
-        for (std::vector<int8_t>::const_reverse_iterator iterator = occupancyGrid.data.rbegin();
+        for (auto iterator = occupancyGrid.data.rbegin();
              iterator != occupancyGrid.data.rend(); ++iterator)
         {
             size_t i = std::distance(occupancyGrid.data.rbegin(), iterator);
@@ -215,7 +215,7 @@ namespace grid_map
         return false;
     }
 
-    bool Costmap::findPath(const Position &robot, const Position &goal, std::vector<Position> &path)
+    bool Costmap::findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path)
     {
         Index robot_index, goal_index, pathpoint_index;
         if (!getIndex(robot, robot_index))
@@ -237,7 +237,7 @@ namespace grid_map
         {
             if ( duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
-                ROS_WARN("TIMEOUT!! Finding Path from Cost map Failed.");
+                ROS_WARN("[Current Path] TIMEOUT!! Finding Path from Cost map Failed.");
                 return false;
             }
             auto pathpoint_x = history_x(pathpoint_index(0), pathpoint_index(1));
@@ -260,6 +260,7 @@ namespace grid_map
             }
         }
 
+        std::reverse(path.begin(), path.end());
         return true;
     }
 }

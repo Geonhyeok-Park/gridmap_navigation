@@ -101,6 +101,7 @@ include_directories(
 
 add_library(${PROJECT_NAME}
   src/global_planner/costmap_ros.cpp
+  src/global_planner/eband_ros.cpp
 )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

@@ -120,6 +120,46 @@ namespace grid_map
         return true;
     }
 
+    void Costmap::toOccupancyGrid(const grid_map::GridMap &gridMap,
+                                  const std::string &layer, float dataMin, float dataMax,
+                                  nav_msgs::OccupancyGrid &occupancyGrid)
+    {
+        occupancyGrid.header.frame_id = gridMap.getFrameId();
+        occupancyGrid.header.stamp.fromNSec(gridMap.getTimestamp());
+        occupancyGrid.info.map_load_time = occupancyGrid.header.stamp; // Same as header stamp as we do not load the map.
+        occupancyGrid.info.resolution = gridMap.getResolution();
+        occupancyGrid.info.width = gridMap.getSize()(0);
+        occupancyGrid.info.height = gridMap.getSize()(1);
+        Position position = gridMap.getPosition() - 0.5 * gridMap.getLength().matrix();
+        occupancyGrid.info.origin.position.x = position.x();
+        occupancyGrid.info.origin.position.y = position.y();
+        occupancyGrid.info.origin.position.z = 0.0;
+        occupancyGrid.info.origin.orientation.x = 0.0;
+        occupancyGrid.info.origin.orientation.y = 0.0;
+        occupancyGrid.info.origin.orientation.z = 0.0;
+        occupancyGrid.info.origin.orientation.w = 1.0;
+        size_t nCells = gridMap.getSize().prod();
+        occupancyGrid.data.resize(nCells);
+
+        // Occupancy probabilities are in the range [0,100]. Unknown is -1.
+        const float cellMin = 0;
+        const float cellMax = 100;
+        const float cellRange = cellMax - cellMin;
+
+        for (GridMapIterator iterator(gridMap); !iterator.isPastEnd(); ++iterator)
+        {
+            float value = (gridMap.at(layer, *iterator) - dataMin) / (dataMax - dataMin);
+            if (std::isnan(value))
+                continue;
+            else
+                value = cellMin + std::min(std::max(0.0f, value), 1.0f) * cellRange;
+
+            size_t index = getLinearIndexFromIndex(iterator.getUnwrappedIndex(), gridMap.getSize(), false);
+            // Reverse cell order because of different conventions between occupancy grid and grid map.
+            occupancyGrid.data[nCells - index - 1] = value;
+        }
+    }
+
     bool Costmap::update(const Position &robot, const Position &goal)
     {
         clear("cost");
@@ -235,7 +275,7 @@ namespace grid_map
         clk::time_point start_time = clk::now();
         while (!pathpoint_index.isApprox(robot_index))
         {
-            if ( duration_ms(clk::now() - start_time) > time_limit_ms_)
+            if (duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
                 ROS_WARN("[Current Path] TIMEOUT!! Finding Path from Cost map Failed.");
                 return false;
@@ -245,7 +285,7 @@ namespace grid_map
             if (std::isfinite(pathpoint_x))
             {
                 Position pathpoint(pathpoint_x, pathpoint_y);
-                path.push_back(pathpoint);  
+                path.push_back(pathpoint);
 
                 if (!getIndex(pathpoint, pathpoint_index))
                 {

@@ -17,7 +17,9 @@ namespace grid_map
     private:
         bool fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid,
                                const std::string &layer, grid_map::GridMap &gridMap);
+
         void inflateOccupancyGrid(int inflation_size);
+
         float getDistance(const Position &pos1, const Position &pos2) { return std::sqrt(std::pow(pos1.x() - pos2.x(), 2) + std::pow(pos1.y() - pos2.y(), 2)); }
 
     public:
@@ -31,6 +33,9 @@ namespace grid_map
 
         bool findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 
+        void toOccupancyGrid(const grid_map::GridMap &gridMap,
+                             const std::string &layer, float dataMin, float dataMax,
+                             nav_msgs::OccupancyGrid &occupancyGrid);
     };
 
     struct CostCell

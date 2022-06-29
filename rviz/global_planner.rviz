@@ -5,10 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Grid1
-        - /GridMap1
-        - /Path1
-        - /Path2
       Splitter Ratio: 0.5
     Tree Height: 344
   - Class: rviz/Selection
@@ -41,7 +37,7 @@ Visualization Manager:
       Cell Size: 0.10000000149011612
       Class: rviz/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -54,7 +50,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 100
       Reference Frame: base_link
-      Value: true
+      Value: false
     - Alpha: 0.10000000149011612
       Class: rviz/Map
       Color Scheme: map
@@ -74,30 +70,6 @@ Visualization Manager:
       Reference Frame: base_link
       Show Trail: false
       Value: true
-    - Alpha: 0.30000001192092896
-      Autocompute Intensity Bounds: true
-      Class: grid_map_rviz_plugin/GridMap
-      Color: 200; 200; 200
-      Color Layer: inflation
-      Color Transformer: GridMapLayer
-      ColorMap: default
-      Enabled: false
-      Grid Cell Decimation: 1
-      Grid Line Thickness: 0.10000000149011612
-      Height Layer: inflation
-      Height Transformer: GridMapLayer
-      History Length: 1
-      Invert ColorMap: false
-      Max Color: 255; 255; 255
-      Max Intensity: 10
-      Min Color: 0; 0; 0
-      Min Intensity: 0
-      Name: GridMap
-      Show Grid Lines: false
-      Topic: /gridmap
-      Unreliable: false
-      Use ColorMap: true
-      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
@@ -108,7 +80,7 @@ Visualization Manager:
       Length: 0.30000001192092896
       Line Style: Lines
       Line Width: 0.029999999329447746
-      Name: Path
+      Name: Path (Global)
       Offset:
         X: 0
         Y: 0
@@ -132,7 +104,7 @@ Visualization Manager:
       Length: 0.30000001192092896
       Line Style: Billboards
       Line Width: 0.009999999776482582
-      Name: Path
+      Name: Path (Local)
       Offset:
         X: 0
         Y: 0
@@ -153,6 +125,16 @@ Visualization Manager:
       Namespaces:
         {}
       Queue Size: 100
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Costmap
+      Topic: /gridmap
+      Unreliable: false
+      Use Timestamp: false
       Value: true
   Enabled: true
   Global Options:
@@ -191,7 +173,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 167.15745544433594
+      Scale: 15.263882637023926
       Target Frame: base_link
       X: -1.4431023597717285
       Y: -0.10953349620103836

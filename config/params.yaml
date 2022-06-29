@@ -9,7 +9,7 @@ global_planner:
   gridMapTopic: "/gridmap" 
   globalPathTopic: "/global_path"
   localPathTopic: "/local_path"
-  localMapTopic: "/gridmap"
+  # localMapTopic: "/gridmap"
 
 
 

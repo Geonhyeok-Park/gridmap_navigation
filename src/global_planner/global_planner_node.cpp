@@ -73,7 +73,7 @@ namespace grid_map
         pub_path = nh.advertise<nav_msgs::Path>(param_pub_path, 10);
         pub_localpath = nh.advertise<nav_msgs::Path>(param_pub_localpath, 10);
         pub_ebandmarker = nh.advertise<visualization_msgs::MarkerArray>(param_pub_eband, 10);
-        pub_map = nh.advertise<grid_map_msgs::GridMap>(param_pub_map, 1);
+        pub_map = nh.advertise<nav_msgs::OccupancyGrid>(param_pub_map, 1);
 
         ROS_INFO("Global Planner Node Initialized.");
         ROS_INFO_STREAM("Waiting for the topic " << sub_goal.getTopic());
@@ -146,7 +146,9 @@ namespace grid_map
         costmap_updated_ = true;
 
         ROS_INFO_STREAM("Update Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
+        start_point = clk::now();
         publishCostmap();
+        ROS_INFO_STREAM("Publish Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
     }
 
     // TODO: smoothing algorighm :start point and end point has to be also smoothed
@@ -226,12 +228,16 @@ namespace grid_map
         return true;
     }
 
-    void GlobalPlannerNode::publishCostmap()
+    void GlobalPlannerNode::publishCostmap()    // TODO: put this into the class with name: toRosMsg
     {
+        auto center_position = (robot_position_ + goal_position_) / 2;
+        auto distance = (robot_position_ - goal_position_).norm() * 2.5;
+        bool is_success;
+        auto submap = costmapPtr_->getSubmap(robot_position_, Length(distance, distance), is_success);
 
-        grid_map_msgs::GridMap msg;
-        GridMapRosConverter::toMessage(*costmapPtr_, msg);
-        msg.info.header.stamp = ros::Time::now();
+        nav_msgs::OccupancyGrid msg;
+        auto cost_at_goal = submap.atPosition("cost", goal_position_);
+        costmapPtr_->toOccupancyGrid(submap, "cost", 1, cost_at_goal, msg);
         pub_map.publish(msg);
     }
 

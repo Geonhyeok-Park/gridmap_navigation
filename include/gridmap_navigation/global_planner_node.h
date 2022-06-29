@@ -26,6 +26,7 @@ namespace grid_map
         std::string param_pub_eband;
         std::string param_sub_localmap;
         bool param_use_globalmap;
+        bool param_getmap_from_topic;
         int param_inflation_size;
         int param_Hz;
         int param_timelimit_ms;
@@ -51,16 +52,18 @@ namespace grid_map
         // Node Status
         bool costmap_updated_;
         bool path_updated_;
+        bool globalmap_received_;
 
     public:
         GlobalPlannerNode(ros::NodeHandle &);
-        ~GlobalPlannerNode() { nh.shutdown(); }
+        ~GlobalPlannerNode() = default;
         void run();
 
     private:
         void useParameterServer();
         void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
         void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
+        void globalmapCallback(const nav_msgs::OccupancyGridConstPtr &);
 
         void updateGoalPosition(const geometry_msgs::Pose &goal);
         bool updateRobotPosition(const ros::Time &time);

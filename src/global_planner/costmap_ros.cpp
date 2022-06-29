@@ -13,7 +13,7 @@ namespace grid_map
         get("occupancy").setConstant(0);
     }
 
-    Costmap::Costmap(nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
+    Costmap::Costmap(const nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
     {
         // setBasicLayers({"cost"});
         try
@@ -32,7 +32,7 @@ namespace grid_map
             ROS_INFO("Grid Inflation Done.");
         }
 
-        ROS_INFO("Costmap with Occupancy map Initialized.");
+        ROS_INFO("Costmap is ready to be Updated.");
     }
 
     void Costmap::inflateOccupancyGrid(int inflation_size)

@@ -9,36 +9,55 @@ namespace grid_map
     GlobalPlannerNode::GlobalPlannerNode(ros::NodeHandle &_nh)
         : nh(_nh),
           tf2_listener(tf2_buffer),
+          globalmap_received_(false),
           costmap_updated_(false),
           path_updated_(false)
     {
         useParameterServer();
 
-        if (param_use_globalmap)
+        if (param_use_globalmap && !param_getmap_from_topic)
         {
-            ROS_INFO("Path Planning With Global Map!!");
+            ROS_INFO("Path Planning With Global Map Service!!");
 
             ros::ServiceClient client;
             nav_msgs::GetMap service;
             client = nh.serviceClient<nav_msgs::GetMap>("/static_map");
-            bool service_responsed = false;
             clk::time_point start_time = clk::now();
-            while (!service_responsed && duration_ms(clk::now() - start_time) < 5000) // 5sec
+            while (!globalmap_received_ && duration_ms(clk::now() - start_time) < 5000) // 5sec
             {
-                ROS_INFO_THROTTLE(1, "use Global map:: Wait until Global map is valid");
-                service_responsed = client.call(service);
+                ROS_INFO_THROTTLE(1, "use Global map:: Waiting until the service is valid....");
+                globalmap_received_ = client.call(service);
             }
-
-            if (!service_responsed)
+            if (!globalmap_received_)
             {
                 ROS_ERROR("use Global map:: Global map not received... Node Shutdown");
-                nh.shutdown();
+                ros::shutdown();
                 return;
             }
 
             ROS_INFO("use Global map:: Global map received.");
             costmapPtr_ = std::make_unique<Costmap>(service.response.map, param_inflation_size);
             costmapPtr_->setTimeLimit(param_timelimit_ms);
+        }
+        else if (param_use_globalmap && param_getmap_from_topic)
+        {
+            ROS_INFO("Path Planning With Global Map Topic!!");
+
+            ros::Subscriber sub_globalmap = nh.subscribe("/map", 1, &GlobalPlannerNode::globalmapCallback, this);
+            ros::Rate rate(param_Hz);
+            clk::time_point start_time = clk::now();
+            while (!globalmap_received_ && duration_ms(clk::now() - start_time) < 10000) // 10sec
+            {
+                ROS_INFO_THROTTLE(1, "use Global map:: Waiting until the topic is valid....");
+                ros::spinOnce();
+                rate.sleep();
+            }
+            if (!globalmap_received_)
+            {
+                ROS_ERROR("use Global map:: Global map not received... Node Shutdown");
+                ros::shutdown();
+                return;
+            }
         }
 
         else if (!param_use_globalmap)
@@ -56,7 +75,16 @@ namespace grid_map
         pub_ebandmarker = nh.advertise<visualization_msgs::MarkerArray>(param_pub_eband, 10);
         pub_map = nh.advertise<grid_map_msgs::GridMap>(param_pub_map, 1);
 
-        ROS_INFO_STREAM("Global Planner Node Initialized. Wait for the topic " << sub_goal.getTopic());
+        ROS_INFO("Global Planner Node Initialized.");
+        ROS_INFO_STREAM("Waiting for the topic " << sub_goal.getTopic());
+    }
+
+    void GlobalPlannerNode::globalmapCallback(const nav_msgs::OccupancyGridConstPtr &msg)
+    {
+        ROS_INFO("use Global map:: Global map recieved.");
+        globalmap_received_ = true;
+        costmapPtr_ = std::make_unique<Costmap>(*msg, param_inflation_size);
+        costmapPtr_->setTimeLimit(param_timelimit_ms);
     }
 
     void GlobalPlannerNode::run()
@@ -121,8 +149,7 @@ namespace grid_map
         publishCostmap();
     }
 
-
-    // TODO: smoothing algorighm :start point and end point has to be also smoothed 
+    // TODO: smoothing algorighm :start point and end point has to be also smoothed
     // 5. Condition to return global path: bubble no longer overlaps
     void GlobalPlannerNode::localmapCallback(const grid_map_msgs::GridMapConstPtr &msg)
     {
@@ -156,17 +183,18 @@ namespace grid_map
         pub_localpath.publish(path_msg);
         // pub_ebandmarker.publish(bubble_msg);
         ROS_INFO_STREAM("Local + smoothing takes " << duration_ms(clk::now() - start_point) << "ms");
-
     }
 
     void GlobalPlannerNode::useParameterServer()
     {
+        nh.param<bool>("useGlobalMap", param_use_globalmap, true);
+        nh.param<bool>("getGlobalMapFromTopic", param_getmap_from_topic, false);
+
         nh.param<std::string>("globalPathTopic", param_pub_path, "path");
         nh.param<std::string>("localPathTopic", param_pub_localpath, "local_path");
 
         nh.param<std::string>("gridMapTopic", param_pub_map, "map");
         nh.param<std::string>("localMapTopic", param_sub_localmap, "localmap");
-        nh.param<bool>("useGlobalMap", param_use_globalmap, true);
 
         nh.param<int>("inflationGridSize", param_inflation_size, 3);
         nh.param<int>("frequency", param_Hz, 10);
@@ -230,8 +258,6 @@ int main(int argc, char **argv)
     ros::init(argc, argv, name);                   // set name of the node
     ros::NodeHandle node_handle(name);             // set namespace of the node through handle. ex: node_name/topic_name
     grid_map::GlobalPlannerNode node(node_handle); // pass handle
-
-    ros::Duration(1.0).sleep(); // Need this to get the TF caches fill up.
     node.run();
 
     return 0;

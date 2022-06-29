@@ -22,7 +22,7 @@ namespace grid_map
 
     public:
         Costmap();
-        explicit Costmap(nav_msgs::OccupancyGrid &occupancy_map, int inflation_size = 0);
+        explicit Costmap(const nav_msgs::OccupancyGrid &occupancy_map, int inflation_size = 0);
         virtual ~Costmap() = default;
 
         void setTimeLimit(int time_ms) { time_limit_ms_ = time_ms; };

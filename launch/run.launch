@@ -3,7 +3,7 @@
 
     <node pkg="map_server" type="map_server" name="global_map_server" args="$(find gridmap_navigation)/map/map.yaml" output="screen" />
 
-    <node pkg="gridmap_navigation" type="global_planner_node" name="global_planner_node" respawn="false" output="screen" />
+    <node pkg="gridmap_navigation" type="global_planner_node" name="global_planner_node" respawn="true" output="screen" />
 
     <node pkg="rviz" type="rviz" name="global_planner_rviz" args="-d $(find gridmap_navigation)/rviz/global_planner.rviz" />
 </launch>

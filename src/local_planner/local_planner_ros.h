@@ -79,7 +79,7 @@ private:
 
 public:
     LocalPlannerNode(ros::NodeHandle &);
-    ~LocalPlannerNode() { nh.shutdown(); }
+    ~LocalPlannerNode() = default;
     void registerNodeParams();
 
     bool recieved_cmdvel_;

@@ -99,15 +99,20 @@ namespace grid_map
                 continue;
             }
 
+            clk::time_point start_point = clk::now();
+
             if (!updateRobotPosition(ros::Time::now())) // Check robot tf in given rates
             {
                 ROS_WARN_THROTTLE(1, "[Process] Update Robot Position Failed. Check TF tree from map to base_link");
                 loop_rate.sleep();
                 continue;
             }
+            ROS_INFO_STREAM("pose update takes " << duration_ms(clk::now() - start_point) << "ms");
+
 
             path_updated_ = false;
             path_.clear();
+            start_point = clk::now();
             if (!costmapPtr_->findGlobalPath(robot_position_, goal_position_, path_)) //
             {
                 ROS_WARN_THROTTLE(1, "[Process] No Valid Path Found from the Current Position. Return empty Path");
@@ -116,6 +121,8 @@ namespace grid_map
                 loop_rate.sleep();
                 continue;
             }
+            ROS_INFO_STREAM("Finding Path takes " << duration_ms(clk::now() - start_point) << "ms");
+
             // smoothing(path_, 10);
             nav_msgs::Path msg;
             toRosMsg(path_, msg);
@@ -228,7 +235,7 @@ namespace grid_map
         return true;
     }
 
-    void GlobalPlannerNode::publishCostmap()    // TODO: put this into the class with name: toRosMsg
+    void GlobalPlannerNode::publishCostmap() // TODO: put this into the class with name: toRosMsg
     {
         auto center_position = (robot_position_ + goal_position_) / 2;
         auto distance = (robot_position_ - goal_position_).norm() * 2.5;
@@ -238,6 +245,10 @@ namespace grid_map
         nav_msgs::OccupancyGrid msg;
         auto cost_at_goal = submap.atPosition("cost", goal_position_);
         costmapPtr_->toOccupancyGrid(submap, "cost", 1, cost_at_goal, msg);
+        // pub_map.publish(msg);
+
+        // nav_msgs::OccupancyGrid msg_global;
+        // costmapPtr_->toOccupancyGrid(*costmapPtr_, "occupancy", 0, 100, msg_global);
         pub_map.publish(msg);
     }
 

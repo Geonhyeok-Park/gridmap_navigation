@@ -190,12 +190,13 @@ namespace grid_map
         }
 
         std::priority_queue<CostCell> visited_list;
-        visited_list.push(CostCell(robot_index, 1.0));
+        visited_list.push(CostCell(goal_index, 1.0));
 
         int neighbor_size = 1;
         Index index_offset(neighbor_size, neighbor_size);
         Index search_buffer(2 * neighbor_size + 1, 2 * neighbor_size + 1);
 
+        bool updated = false;
         clk::time_point start_time = clk::now();
         while (!visited_list.empty())
         {
@@ -209,9 +210,6 @@ namespace grid_map
                 ROS_WARN("[Update Costmap] TIMEOUT! Suspend Searching...Set Closer Goal");
                 return false;
             }
-
-            if (std::isfinite(atPosition("cost", goal)))
-                return true;
 
             SubmapIterator neighbor_iterator(*this, prioritycell.index - index_offset, search_buffer);
             for (neighbor_iterator; !neighbor_iterator.isPastEnd(); ++neighbor_iterator)
@@ -239,9 +237,10 @@ namespace grid_map
                 if (!std::isfinite(neighbor_cost)) // never visited before
                 {
                     neighbor_cost = prioritycell.cost + moving_cost;
-                    visited_list.push(CostCell(neighbor_index, neighbor_cost));
                     neighbor_history_x = prioritycell_position(0);
                     neighbor_history_y = prioritycell_position(1);
+                    if (!updated)
+                        visited_list.push(CostCell(neighbor_index, neighbor_cost));
                 }
                 else if (neighbor_cost > prioritycell.cost + moving_cost) // if found shorter path
                 {
@@ -250,48 +249,42 @@ namespace grid_map
                     neighbor_history_y = prioritycell_position(1);
                 }
             }
+
+            if (std::isfinite(atPosition("cost", robot)))
+                updated = true;
         }
-        ROS_WARN("[Update Costmap] Searched All Connected Grid Cells. Goal is blocked from the Robot.");
-        return false;
+
+        if (!updated)
+        {
+            ROS_WARN("[Update Costmap] Searched All Connected Grid Cells. Goal is blocked from the Robot.");
+            return false;
+        }
+        return true;
     }
 
     bool Costmap::findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path)
     {
-        Index robot_index, goal_index, pathpoint_index;
-        if (!getIndex(robot, robot_index))
-        {
-            ROS_WARN_THROTTLE(1, "[Current Path] Robot is Out of Map Boundary. Failed to get Index from robot position.");
-            return false;
-        }
-        if (!getIndex(goal, goal_index))
-        {
-            ROS_WARN_THROTTLE(1, "[Current Path] Goal is Out of Map Boundary. Failed to get Index from Goal position.");
-            return false;
-        }
+        Position waypoint_position(robot);
+        Index waypoint_index;
 
-        pathpoint_index = goal_index;
         const auto &history_x = get("history_x");
         const auto &history_y = get("history_y");
         clk::time_point start_time = clk::now();
-        while (!pathpoint_index.isApprox(robot_index))
+        while ((waypoint_position - goal).norm() > 0.3)
         {
             if (duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
                 ROS_WARN("[Current Path] TIMEOUT!! Finding Path from Cost map Failed.");
                 return false;
             }
-            auto pathpoint_x = history_x(pathpoint_index(0), pathpoint_index(1));
-            auto pathpoint_y = history_y(pathpoint_index(0), pathpoint_index(1));
+            getIndex(waypoint_position, waypoint_index);
+            auto pathpoint_x = history_x(waypoint_index(0), waypoint_index(1));
+            auto pathpoint_y = history_y(waypoint_index(0), waypoint_index(1));
             if (std::isfinite(pathpoint_x))
             {
                 Position pathpoint(pathpoint_x, pathpoint_y);
                 path.push_back(pathpoint);
-
-                if (!getIndex(pathpoint, pathpoint_index))
-                {
-                    ROS_WARN_THROTTLE(1, "[Current Path] Waypoint is Out of Map Boundary. Failed to get Index from waypoint position.");
-                    return false;
-                }
+                waypoint_position = pathpoint;
             }
             else
             {

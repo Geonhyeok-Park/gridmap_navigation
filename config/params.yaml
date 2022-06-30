@@ -2,7 +2,7 @@ global_planner:
   # Params
   useGlobalMap: true
   getGlobalMapFromTopic: true
-  inflationGridSize: 1
+  inflationGridSize: 5
   maxProcessTime: 2000 # milisecond
 
   # Publish

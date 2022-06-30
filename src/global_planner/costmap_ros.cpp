@@ -7,7 +7,6 @@ namespace grid_map
 {
     Costmap::Costmap() : GridMap({"occupancy", "cost", "history_x", "history_y"})
     {
-        // setBasicLayers({"cost"});
         setFrameId("map");
         setGeometry(Length(300, 300), 0.1);
         get("occupancy").setConstant(0);
@@ -15,10 +14,9 @@ namespace grid_map
 
     Costmap::Costmap(const nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
     {
-        // setBasicLayers({"cost"});
         try
         {
-            if (!fromOccupancyGrid(occupancy_grid, "occupancy", *this))
+            if (!fromOccupancyGrid(occupancy_grid))
                 throw std::runtime_error("Occupancy map rotated or has strange size");
         }
         catch (const std::exception &e)
@@ -72,8 +70,7 @@ namespace grid_map
         }
     }
 
-    bool Costmap::fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid,
-                                    const std::string &layer, grid_map::GridMap &gridMap)
+    bool Costmap::fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid)
     {
         const Size size(occupancyGrid.info.width, occupancyGrid.info.height);
         const double resolution = occupancyGrid.info.resolution;
@@ -99,11 +96,11 @@ namespace grid_map
         }
 
         // TODO: Split to `initializeFrom` and `from` as for Costmap2d.
-        if ((gridMap.getSize() != size).any() || gridMap.getResolution() != resolution || (gridMap.getLength() != length).any() || gridMap.getPosition() != position || gridMap.getFrameId() != frameId || !gridMap.getStartIndex().isZero())
+        if ((getSize() != size).any() || getResolution() != resolution || (getLength() != length).any() || getPosition() != position || getFrameId() != frameId || !getStartIndex().isZero())
         {
-            gridMap.setTimestamp(occupancyGrid.header.stamp.toNSec());
-            gridMap.setFrameId(frameId);
-            gridMap.setGeometry(length, resolution, position);
+            setTimestamp(occupancyGrid.header.stamp.toNSec());
+            setFrameId(frameId);
+            setGeometry(length, resolution, position);
         }
 
         // Reverse iteration is required because of different conventions
@@ -116,21 +113,19 @@ namespace grid_map
             data(i) = *iterator != -1 ? *iterator : NAN;
         }
 
-        gridMap.add(layer, data);
+        add("occupancy", data);
         return true;
     }
 
-    void Costmap::toOccupancyGrid(const grid_map::GridMap &gridMap,
-                                  const std::string &layer, float dataMin, float dataMax,
-                                  nav_msgs::OccupancyGrid &occupancyGrid)
+    void Costmap::toOccupancyGrid(nav_msgs::OccupancyGrid &occupancyGrid)
     {
-        occupancyGrid.header.frame_id = gridMap.getFrameId();
-        occupancyGrid.header.stamp.fromNSec(gridMap.getTimestamp());
+        occupancyGrid.header.frame_id = getFrameId();
+        occupancyGrid.header.stamp.fromNSec(getTimestamp());
         occupancyGrid.info.map_load_time = occupancyGrid.header.stamp; // Same as header stamp as we do not load the map.
-        occupancyGrid.info.resolution = gridMap.getResolution();
-        occupancyGrid.info.width = gridMap.getSize()(0);
-        occupancyGrid.info.height = gridMap.getSize()(1);
-        Position position = gridMap.getPosition() - 0.5 * gridMap.getLength().matrix();
+        occupancyGrid.info.resolution = getResolution();
+        occupancyGrid.info.width = getSize()(0);
+        occupancyGrid.info.height = getSize()(1);
+        Position position = getPosition() - 0.5 * getLength().matrix();
         occupancyGrid.info.origin.position.x = position.x();
         occupancyGrid.info.origin.position.y = position.y();
         occupancyGrid.info.origin.position.z = 0.0;
@@ -138,7 +133,7 @@ namespace grid_map
         occupancyGrid.info.origin.orientation.y = 0.0;
         occupancyGrid.info.origin.orientation.z = 0.0;
         occupancyGrid.info.origin.orientation.w = 1.0;
-        size_t nCells = gridMap.getSize().prod();
+        size_t nCells = getSize().prod();
         occupancyGrid.data.resize(nCells);
 
         // Occupancy probabilities are in the range [0,100]. Unknown is -1.
@@ -146,15 +141,16 @@ namespace grid_map
         const float cellMax = 100;
         const float cellRange = cellMax - cellMin;
 
-        for (GridMapIterator iterator(gridMap); !iterator.isPastEnd(); ++iterator)
+        const auto &costmap = get("cost");
+        for (GridMapIterator iterator(*this); !iterator.isPastEnd(); ++iterator)
         {
-            float value = (gridMap.at(layer, *iterator) - dataMin) / (dataMax - dataMin);
+            float value = (costmap((*iterator).x(), (*iterator).y()) - min_cost_) / (max_cost_ - min_cost_);
             if (std::isnan(value))
                 continue;
             else
                 value = cellMin + std::min(std::max(0.0f, value), 1.0f) * cellRange;
 
-            size_t index = getLinearIndexFromIndex(iterator.getUnwrappedIndex(), gridMap.getSize(), false);
+            size_t index = getLinearIndexFromIndex(iterator.getUnwrappedIndex(), getSize(), false);
             // Reverse cell order because of different conventions between occupancy grid and grid map.
             occupancyGrid.data[nCells - index - 1] = value;
         }
@@ -190,7 +186,8 @@ namespace grid_map
         }
 
         std::priority_queue<CostCell> visited_list;
-        visited_list.push(CostCell(goal_index, 1.0));
+        max_cost_ = min_cost_;
+        visited_list.push(CostCell(goal_index, min_cost_));
 
         int neighbor_size = 1;
         Index index_offset(neighbor_size, neighbor_size);
@@ -237,6 +234,7 @@ namespace grid_map
                 if (!std::isfinite(neighbor_cost)) // never visited before
                 {
                     neighbor_cost = prioritycell.cost + moving_cost;
+                    max_cost_ = std::max(max_cost_, neighbor_cost);
                     neighbor_history_x = prioritycell_position(0);
                     neighbor_history_y = prioritycell_position(1);
                     if (!updated)
@@ -270,7 +268,7 @@ namespace grid_map
         const auto &history_x = get("history_x");
         const auto &history_y = get("history_y");
         clk::time_point start_time = clk::now();
-        while ((waypoint_position - goal).norm() > 0.3)
+        while ((waypoint_position - goal).norm() > getResolution())
         {
             if (duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
@@ -293,7 +291,7 @@ namespace grid_map
             }
         }
 
-        std::reverse(path.begin(), path.end());
         return true;
     }
+
 }

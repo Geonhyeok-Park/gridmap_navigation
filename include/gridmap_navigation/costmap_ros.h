@@ -13,10 +13,11 @@ namespace grid_map
     {
     private:
         int time_limit_ms_ = 2000;
+        float min_cost_ = 1.0;
+        float max_cost_;
 
     private:
-        bool fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid,
-                               const std::string &layer, grid_map::GridMap &gridMap);
+        bool fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid);
 
         void inflateOccupancyGrid(int inflation_size);
 
@@ -33,9 +34,7 @@ namespace grid_map
 
         bool findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 
-        void toOccupancyGrid(const grid_map::GridMap &gridMap,
-                             const std::string &layer, float dataMin, float dataMax,
-                             nav_msgs::OccupancyGrid &occupancyGrid);
+        void toOccupancyGrid(nav_msgs::OccupancyGrid &occupancyGrid);
     };
 
     struct CostCell

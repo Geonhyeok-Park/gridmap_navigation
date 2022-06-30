@@ -87,53 +87,6 @@ namespace grid_map
         costmapPtr_->setTimeLimit(param_timelimit_ms);
     }
 
-    void GlobalPlannerNode::run()
-    {
-        ros::Rate loop_rate(param_Hz);
-        while (ros::ok())
-        {
-            if (!costmap_updated_) // Check new callbacks in given rates when costmap not initialized or failed to update
-            {
-                ros::spinOnce();
-                loop_rate.sleep();
-                continue;
-            }
-
-            clk::time_point start_point = clk::now();
-
-            if (!updateRobotPosition(ros::Time::now())) // Check robot tf in given rates
-            {
-                ROS_WARN_THROTTLE(1, "[Process] Update Robot Position Failed. Check TF tree from map to base_link");
-                loop_rate.sleep();
-                continue;
-            }
-            ROS_INFO_STREAM("pose update takes " << duration_ms(clk::now() - start_point) << "ms");
-
-
-            path_updated_ = false;
-            path_.clear();
-            start_point = clk::now();
-            if (!costmapPtr_->findGlobalPath(robot_position_, goal_position_, path_)) //
-            {
-                ROS_WARN_THROTTLE(1, "[Process] No Valid Path Found from the Current Position. Return empty Path");
-                // clear path in here?
-                ros::spinOnce();
-                loop_rate.sleep();
-                continue;
-            }
-            ROS_INFO_STREAM("Finding Path takes " << duration_ms(clk::now() - start_point) << "ms");
-
-            // smoothing(path_, 10);
-            nav_msgs::Path msg;
-            toRosMsg(path_, msg);
-            pub_path.publish(msg);
-            path_updated_ = true;
-
-            ros::spinOnce();
-            loop_rate.sleep();
-        }
-    }
-
     void GlobalPlannerNode::goalCallback(const geometry_msgs::PoseStampedConstPtr &msg)
     {
         costmap_updated_ = false;
@@ -153,10 +106,59 @@ namespace grid_map
         costmap_updated_ = true;
 
         ROS_INFO_STREAM("Update Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
+        
         start_point = clk::now();
-        publishCostmap();
+        nav_msgs::OccupancyGrid occupancy;
+        costmapPtr_->toOccupancyGrid(occupancy);
+        pub_map.publish(occupancy);
         ROS_INFO_STREAM("Publish Costmap takes " << duration_ms(clk::now() - start_point) << "ms");
     }
+
+    void GlobalPlannerNode::run()
+    {
+        ros::Rate loop_rate(param_Hz);
+        while (ros::ok())
+        {
+            if (!costmap_updated_) // Check new callbacks in given rates when costmap not initialized or failed to update
+            {
+                ros::spinOnce();
+                loop_rate.sleep();
+                continue;
+            }
+
+            clk::time_point start_point = clk::now();
+            if (!updateRobotPosition(ros::Time::now())) // Check robot tf in given rates
+            {
+                ROS_WARN_THROTTLE(1, "[Process] Update Robot Position Failed. Check TF tree from map to base_link");
+                loop_rate.sleep();
+                continue;
+            }
+            ROS_INFO_STREAM("Load Robot Pose from TF tree takes " << duration_ms(clk::now() - start_point) << "ms");
+
+            path_updated_ = false;
+            path_.clear();
+            start_point = clk::now();
+            if (!costmapPtr_->findGlobalPath(robot_position_, goal_position_, path_)) //
+            {
+                ROS_WARN_THROTTLE(1, "[Process] No Valid Path Found from the Current Position. Pause path messages");
+                ros::spinOnce();
+                loop_rate.sleep();
+                continue;
+            }
+            ROS_INFO_STREAM("Finding Path takes " << duration_ms(clk::now() - start_point) << "ms");
+
+            smoothing(path_, 20);
+
+            nav_msgs::Path msg;
+            toRosMsg(path_, msg);
+            pub_path.publish(msg);
+            path_updated_ = true;
+
+            ros::spinOnce();
+            loop_rate.sleep();
+        }
+    }
+
 
     // TODO: smoothing algorighm :start point and end point has to be also smoothed
     // 5. Condition to return global path: bubble no longer overlaps
@@ -233,23 +235,6 @@ namespace grid_map
         robot_position_(0) = robot_pose.transform.translation.x;
         robot_position_(1) = robot_pose.transform.translation.y;
         return true;
-    }
-
-    void GlobalPlannerNode::publishCostmap() // TODO: put this into the class with name: toRosMsg
-    {
-        auto center_position = (robot_position_ + goal_position_) / 2;
-        auto distance = (robot_position_ - goal_position_).norm() * 2.5;
-        bool is_success;
-        auto submap = costmapPtr_->getSubmap(robot_position_, Length(distance, distance), is_success);
-
-        nav_msgs::OccupancyGrid msg;
-        auto cost_at_goal = submap.atPosition("cost", goal_position_);
-        costmapPtr_->toOccupancyGrid(submap, "cost", 1, cost_at_goal, msg);
-        // pub_map.publish(msg);
-
-        // nav_msgs::OccupancyGrid msg_global;
-        // costmapPtr_->toOccupancyGrid(*costmapPtr_, "occupancy", 0, 100, msg_global);
-        pub_map.publish(msg);
     }
 
     void GlobalPlannerNode::toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg)

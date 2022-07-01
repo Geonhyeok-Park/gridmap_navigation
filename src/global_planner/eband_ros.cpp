@@ -21,8 +21,8 @@ namespace grid_map
     {
         Index bubble_grid_index;
         localmap.getIndex(position_, bubble_grid_index);
-        const auto &obstacle_map = localmap.get("inflation");
-        // const auto &obstacle_map = localmap.get("occupancy"); // TODO: layer has to be changed
+        // const auto &obstacle_map = localmap.get("inflation");
+        const auto &obstacle_map = localmap.get("occupancy"); // TODO: layer has to be changed
 
         SpiralIterator search_iterator(localmap, position_, radius_);
         for (search_iterator; !search_iterator.isPastEnd(); ++search_iterator)
@@ -79,7 +79,6 @@ namespace grid_map
                 ROS_WARN("[EB Update] Updated Bubble is Out of Map.");
                 return false;
             }
-            // cannot move to unknown grd and occupied grid
             const auto &updated_state = occupancymap(updated_position_index(0), updated_position_index(1));
             if (!std::isfinite(updated_state) || updated_state > 0)
             {

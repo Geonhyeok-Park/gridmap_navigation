@@ -14,6 +14,7 @@
 
 #include <gridmap_navigation/costmap_ros.h>
 #include <gridmap_navigation/eband_ros.h>
+#include <gridmap_navigation/CloudManager.hpp>
 
 namespace grid_map
 {
@@ -27,7 +28,7 @@ namespace grid_map
         std::string param_sub_localmap;
         bool param_use_globalmap;
         bool param_getmap_from_topic;
-        int param_inflation_size;
+        double param_robot_radius;
         int param_Hz;
         int param_timelimit_ms;
 
@@ -39,9 +40,12 @@ namespace grid_map
         ros::Publisher pub_localpath;
         ros::Publisher pub_ebandmarker;
         ros::Publisher pub_map;
+        ros::Publisher pub_localmap;
 
         tf2_ros::Buffer tf2_buffer;
         tf2_ros::TransformListener tf2_listener;
+
+        CloudManager<pcl::PointXYZI> pc;
 
     private:
         std::unique_ptr<Costmap> costmapPtr_;
@@ -51,7 +55,7 @@ namespace grid_map
 
         // Node Status
         bool costmap_updated_;
-        bool path_updated_;
+        bool globalpath_updated_;
         bool globalmap_received_;
 
     public:
@@ -59,15 +63,15 @@ namespace grid_map
         ~GlobalPlannerNode() = default;
         void run();
 
-    private:
         void useParameterServer();
         void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
-        void localmapCallback(const grid_map_msgs::GridMapConstPtr &);
+        void localmapCallback(const sensor_msgs::PointCloud2Ptr &);
         void globalmapCallback(const nav_msgs::OccupancyGridConstPtr &);
 
         void updateGoalPosition(const geometry_msgs::Pose &goal);
         bool updateRobotPosition(const ros::Time &time);
 
+        bool findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path);
         void toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg);
     };
 

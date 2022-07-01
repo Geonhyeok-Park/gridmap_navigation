@@ -2,14 +2,14 @@ global_planner:
   # Params
   useGlobalMap: true
   getGlobalMapFromTopic: true
-  inflationGridSize: 5
+  robotRadius: 0.3
   maxProcessTime: 2000 # milisecond
 
   # Publish
   gridMapTopic: "/gridmap" 
   globalPathTopic: "/global_path"
   localPathTopic: "/local_path"
-  # localMapTopic: "/gridmap"
+  localMapTopic: "/elevation_map_raw_visualization/elevation_cloud"
 
 
 

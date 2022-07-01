@@ -13,10 +13,17 @@ namespace grid_map
     {
     private:
         int time_limit_ms_ = 2000;
+        double robot_radius_ = 0.3;
         float min_cost_ = 1.0;
         float max_cost_;
 
     private:
+        bool isUnknown(const float &cell) { return !std::isfinite(cell); };
+        bool isKnown(const float &cell) { return std::isfinite(cell); };
+        bool isOccupied(const float &cell) { return cell > 0; };
+        bool isFree(const float &cell) { return cell < FLT_EPSILON; };
+        bool isSameGrid(const Index &c1, const Index &c2) { return c1.isApprox(c2); };
+
         bool fromOccupancyGrid(const nav_msgs::OccupancyGrid &occupancyGrid);
 
         void inflateOccupancyGrid(int inflation_size);
@@ -25,16 +32,16 @@ namespace grid_map
 
     public:
         Costmap();
-        explicit Costmap(const nav_msgs::OccupancyGrid &occupancy_map, int inflation_size = 0);
+        explicit Costmap(const nav_msgs::OccupancyGrid &occupancy_map, double robot_radius);
         virtual ~Costmap() = default;
 
         void setTimeLimit(int time_ms) { time_limit_ms_ = time_ms; };
 
         bool update(const Position &robot, const Position &goal);
 
-        bool findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path);
+        bool returnPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 
-        void toOccupancyGrid(nav_msgs::OccupancyGrid &occupancyGrid);
+        void toRosMsg(nav_msgs::OccupancyGrid &occupancyGrid);
     };
 
     struct CostCell

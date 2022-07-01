@@ -43,7 +43,7 @@ namespace grid_map
     };
 
     double BubbleXYRD::radius_min = 0.4;
-    double BubbleXYRD::radius_max = 0.8;
+    double BubbleXYRD::radius_max = 0.6;
 
     class ElasticBand
     {

@@ -5,14 +5,14 @@ typedef std::chrono::high_resolution_clock clk;
 
 namespace grid_map
 {
-    Costmap::Costmap() : GridMap({"occupancy", "cost", "history_x", "history_y"})
+    Costmap::Costmap() : GridMap({"occupancy", "cost"})
     {
         setFrameId("map");
         setGeometry(Length(300, 300), 0.1);
         get("occupancy").setConstant(0);
     }
 
-    Costmap::Costmap(const nav_msgs::OccupancyGrid &occupancy_grid, int inflation_size) : GridMap({"occupancy", "cost", "history_x", "history_y"})
+    Costmap::Costmap(const nav_msgs::OccupancyGrid &occupancy_grid, double robot_radius) : GridMap({"occupancy", "cost"})
     {
         try
         {
@@ -24,10 +24,16 @@ namespace grid_map
             std::cerr << e.what() << '\n';
         }
 
+        int inflation_size;
+        if (std::fmod(robot_radius, getResolution()) < DBL_EPSILON)
+            inflation_size = robot_radius / getResolution();
+        else
+            inflation_size = robot_radius / getResolution() + 1;
+
         if (inflation_size != 0)
         {
             inflateOccupancyGrid(inflation_size);
-            ROS_INFO("Grid Inflation Done.");
+            ROS_INFO_STREAM("Grid Inflation with size " << inflation_size << " Done.");
         }
 
         ROS_INFO("Costmap is ready to be Updated.");
@@ -37,17 +43,15 @@ namespace grid_map
     {
         add("inflation");
 
-        // save obstacle index
         std::vector<Index> obstacles;
         for (GridMapIterator it(*this); !it.isPastEnd(); ++it)
         {
             const auto &state = at("occupancy", *it);
 
-            // skip for Nan
-            if (!std::isfinite(state))
+            if (isUnknown(state))
                 continue;
-            // skip for free (0)
-            if (state < FLT_EPSILON)
+
+            if (isFree(state))
                 continue;
 
             obstacles.push_back(*it);
@@ -117,7 +121,7 @@ namespace grid_map
         return true;
     }
 
-    void Costmap::toOccupancyGrid(nav_msgs::OccupancyGrid &occupancyGrid)
+    void Costmap::toRosMsg(nav_msgs::OccupancyGrid &occupancyGrid)
     {
         occupancyGrid.header.frame_id = getFrameId();
         occupancyGrid.header.stamp.fromNSec(getTimestamp());
@@ -144,7 +148,7 @@ namespace grid_map
         const auto &costmap = get("cost");
         for (GridMapIterator iterator(*this); !iterator.isPastEnd(); ++iterator)
         {
-            float value = (costmap((*iterator).x(), (*iterator).y()) - min_cost_) / (max_cost_ - min_cost_);
+            float value = (costmap((*iterator).x(), (*iterator).y()) - (min_cost_ - 10)) / (max_cost_ - (min_cost_ - 10));
             if (std::isnan(value))
                 continue;
             else
@@ -159,13 +163,9 @@ namespace grid_map
     bool Costmap::update(const Position &robot, const Position &goal)
     {
         clear("cost");
-        clear("history_x");
-        clear("history_y");
 
         const auto &occupancymap = (std::find(getLayers().begin(), getLayers().end(), "inflation") != getLayers().end() ? get("inflation") : get("occupancy"));
         auto &costmap = get("cost");
-        auto &historymap_x = get("history_x");
-        auto &historymap_y = get("history_y");
 
         Index robot_index, goal_index;
         if (!getIndex(robot, robot_index))
@@ -179,28 +179,31 @@ namespace grid_map
             return false;
         }
         const auto &goal_state = occupancymap(goal_index(0), goal_index(1));
-        if (!std::isfinite(goal_state) || goal_state > 0) // goal in unknown or occupied grid
+        if (isUnknown(goal_state) || isOccupied(goal_state))
         {
             ROS_WARN_THROTTLE(1, "[update Costmap] Please put Goal into Valid Region. Failed to Update Costmap.");
             return false;
         }
 
+        // put searched grid cells into visited list : start from goal position
         std::priority_queue<CostCell> visited_list;
-        max_cost_ = min_cost_;
-        visited_list.push(CostCell(goal_index, min_cost_));
+        CostCell start_grid(goal_index, min_cost_);
+        visited_list.push(start_grid);
 
         int neighbor_size = 1;
         Index index_offset(neighbor_size, neighbor_size);
         Index search_buffer(2 * neighbor_size + 1, 2 * neighbor_size + 1);
 
         bool updated = false;
+        max_cost_ = min_cost_;
         clk::time_point start_time = clk::now();
         while (!visited_list.empty())
         {
-            const auto prioritycell = visited_list.top();
+            CostCell prioritycell = visited_list.top();
+            visited_list.pop();
+
             Position prioritycell_position;
             getPosition(prioritycell.index, prioritycell_position);
-            visited_list.pop();
 
             if (duration_ms(clk::now() - start_time) > time_limit_ms_)
             {
@@ -219,36 +222,29 @@ namespace grid_map
                     continue;
 
                 // pass center grid
-                if (neighbor_index.isApprox(prioritycell.index))
+                if (isSameGrid(neighbor_index, prioritycell.index))
                     continue;
 
-                // pass unknown grid and occupied grid
-                const auto &neighbor_occupancy = occupancymap(neighbor_index(0), neighbor_index(1));
-                if (!std::isfinite(neighbor_occupancy) || neighbor_occupancy > 0)
+                const auto &neighbor_state = occupancymap(neighbor_index(0), neighbor_index(1));
+                if (isUnknown(neighbor_state) || isOccupied(neighbor_state))
                     continue;
 
                 auto &neighbor_cost = costmap(neighbor_index(0), neighbor_index(1));
-                auto &neighbor_history_x = historymap_x(neighbor_index(0), neighbor_index(1));
-                auto &neighbor_history_y = historymap_y(neighbor_index(0), neighbor_index(1));
                 const auto &moving_cost = getDistance(prioritycell_position, neighbor_position);
-                if (!std::isfinite(neighbor_cost)) // never visited before
+                if (isUnknown(neighbor_cost))
                 {
                     neighbor_cost = prioritycell.cost + moving_cost;
                     max_cost_ = std::max(max_cost_, neighbor_cost);
-                    neighbor_history_x = prioritycell_position(0);
-                    neighbor_history_y = prioritycell_position(1);
                     if (!updated)
                         visited_list.push(CostCell(neighbor_index, neighbor_cost));
                 }
                 else if (neighbor_cost > prioritycell.cost + moving_cost) // if found shorter path
                 {
-                    neighbor_cost = prioritycell.cost + moving_cost;
-                    neighbor_history_x = prioritycell_position(0);
-                    neighbor_history_y = prioritycell_position(1);
+                    // neighbor_cost = prioritycell.cost + moving_cost;
                 }
             }
 
-            if (std::isfinite(atPosition("cost", robot)))
+            if (isKnown(atPosition("cost", robot)))
                 updated = true;
         }
 
@@ -259,39 +255,4 @@ namespace grid_map
         }
         return true;
     }
-
-    bool Costmap::findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path)
-    {
-        Position waypoint_position(robot);
-        Index waypoint_index;
-
-        const auto &history_x = get("history_x");
-        const auto &history_y = get("history_y");
-        clk::time_point start_time = clk::now();
-        while ((waypoint_position - goal).norm() > getResolution())
-        {
-            if (duration_ms(clk::now() - start_time) > time_limit_ms_)
-            {
-                ROS_WARN("[Current Path] TIMEOUT!! Finding Path from Cost map Failed.");
-                return false;
-            }
-            getIndex(waypoint_position, waypoint_index);
-            auto pathpoint_x = history_x(waypoint_index(0), waypoint_index(1));
-            auto pathpoint_y = history_y(waypoint_index(0), waypoint_index(1));
-            if (std::isfinite(pathpoint_x))
-            {
-                Position pathpoint(pathpoint_x, pathpoint_y);
-                path.push_back(pathpoint);
-                waypoint_position = pathpoint;
-            }
-            else
-            {
-                ROS_WARN("[FindPath] Current Robot position has never been visited when Planning.");
-                return false;
-            }
-        }
-
-        return true;
-    }
-
 }

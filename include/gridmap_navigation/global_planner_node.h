@@ -62,6 +62,7 @@ namespace grid_map
         GlobalPlannerNode(ros::NodeHandle &);
         ~GlobalPlannerNode() = default;
         void run();
+        bool findGlobalPath();
 
         void useParameterServer();
         void goalCallback(const geometry_msgs::PoseStamped::ConstPtr &);
@@ -71,7 +72,7 @@ namespace grid_map
         void updateGoalPosition(const geometry_msgs::Pose &goal);
         bool updateRobotPosition(const ros::Time &time);
 
-        bool findGlobalPath(const Position &robot, const Position &goal, std::vector<Position> &path);
+        bool findPathInMatrix(const GridMap::Matrix &matrix, const Position &robot, const Position &goal, std::vector<Position> &path);
         void toRosMsg(const std::vector<Position> &path, nav_msgs::Path &msg);
     };
 

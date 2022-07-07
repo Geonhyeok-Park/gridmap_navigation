@@ -123,6 +123,10 @@ add_library(${PROJECT_NAME}
  src/global_planner/global_planner_node.cpp ${SOURCE}
  )
 
+ add_executable(laser_converter_node
+ src/laser_converter_node.cpp ${SOURCE}
+ )
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -147,4 +151,9 @@ add_library(${PROJECT_NAME}
 target_link_libraries(global_planner_node
 ${catkin_LIBRARIES}
 ${PROJECT_NAME}
+)
+
+target_link_libraries(laser_converter_node
+${catkin_LIBRARIES}
+
 )

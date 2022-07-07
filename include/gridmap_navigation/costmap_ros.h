@@ -41,7 +41,7 @@ namespace grid_map
 
         bool returnPath(const Position &robot, const Position &goal, std::vector<Position> &path);
 
-        void toRosMsg(nav_msgs::OccupancyGrid &occupancyGrid);
+        void toRosMsg(const std::string &layer, nav_msgs::OccupancyGrid &occupancyGrid);
     };
 
     struct CostCell

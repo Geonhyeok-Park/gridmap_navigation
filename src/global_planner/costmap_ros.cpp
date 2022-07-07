@@ -121,7 +121,7 @@ namespace grid_map
         return true;
     }
 
-    void Costmap::toRosMsg(nav_msgs::OccupancyGrid &occupancyGrid)
+    void Costmap::toRosMsg(const std::string &layer, nav_msgs::OccupancyGrid &occupancyGrid)
     {
         occupancyGrid.header.frame_id = getFrameId();
         occupancyGrid.header.stamp.fromNSec(getTimestamp());
@@ -145,7 +145,7 @@ namespace grid_map
         const float cellMax = 100;
         const float cellRange = cellMax - cellMin;
 
-        const auto &costmap = get("cost");
+        const auto &costmap = get(layer);
         for (GridMapIterator iterator(*this); !iterator.isPastEnd(); ++iterator)
         {
             float value = (costmap((*iterator).x(), (*iterator).y()) - (min_cost_ - 10)) / (max_cost_ - (min_cost_ - 10));
@@ -189,6 +189,7 @@ namespace grid_map
         std::priority_queue<CostCell> visited_list;
         CostCell start_grid(goal_index, min_cost_);
         visited_list.push(start_grid);
+        costmap(goal_index(0), goal_index(1)) = min_cost_;
 
         int neighbor_size = 1;
         Index index_offset(neighbor_size, neighbor_size);
